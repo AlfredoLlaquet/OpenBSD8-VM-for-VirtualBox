@@ -2,6 +2,11 @@ name: Build OpenBSD Xfce for VirtualBox
 
 on:
   workflow_dispatch:
+    inputs:
+      checkpoint_run:
+        description: Optional ID of a previous run containing this image's package checkpoint
+        type: string
+        required: false
   push:
     branches: [main]
     paths:
@@ -18,6 +23,7 @@ jobs:
     timeout-minutes: 310
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v6
         with:
@@ -33,8 +39,40 @@ jobs:
           qemu-system-x86_64 --version
           df -h "$RUNNER_TEMP"
 
+      - name: Restore a previous package checkpoint when requested
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.checkpoint_run != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.checkpoint_run }}
+        run: |
+          [[ $SOURCE_RUN =~ ^[0-9]+$ ]]
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name installed-packages --dir "$RUNNER_TEMP/obsd-checkpoint"
+          cd "$RUNNER_TEMP/obsd-checkpoint"
+          sha256sum --check SHA256SUMS
+
       - name: Install OpenBSD, boot the exported disk, test Xfce, and package the image
-        run: bash make_disk.sh "$RUNNER_TEMP/delivery"
+        id: build
+        run: bash make_disk.sh "$RUNNER_TEMP/delivery" "$RUNNER_TEMP/obsd-checkpoint"
+
+      - name: Check for a reusable installed system after a failed build
+        if: ${{ failure() && steps.build.outcome == 'failure' && github.event.repository.private == true }}
+        id: checkpoint
+        run: |
+          if [[ -s "$RUNNER_TEMP/obsd-checkpoint/packages.qcow2" ]]; then
+            cd "$RUNNER_TEMP/obsd-checkpoint"
+            sha256sum packages.qcow2 desktop-password root-password > SHA256SUMS
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Keep the private package checkpoint for a retry
+        if: ${{ failure() && steps.checkpoint.outputs.ready == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: installed-packages
+          path: ${{ runner.temp }}/obsd-checkpoint/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 3
 
       - name: Publish the verified disk in this private repository
         if: github.event.repository.private == true

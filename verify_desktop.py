@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shlex
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -20,7 +21,17 @@ from PIL import Image
 GREETER = r"""
 export DISPLAY=:0
 for attempt in $(jot 90); do
-    for cookie in /etc/X11/xenodm/authdir/authfiles/* /var/run/xenodm/authdir/authfiles/*; do
+    server_cookie=$(ps -axww -o user=,ucomm=,args= | awk '
+        ($1 == "root" || $1 == "_x11") && ($2 == "Xorg" || $2 == "X") {
+            display = 0
+            cookie = ""
+            for (i = 3; i <= NF; i++) {
+                if ($i == ":0" || $i == ":0.0") display = 1
+                if ($i == "-auth" && $(i+1) ~ /^\/[[:alnum:]_.:+\/-]+$/) cookie = $(i+1)
+            }
+            if (display && cookie != "") { print cookie; exit }
+        }')
+    for cookie in "$server_cookie" /etc/X11/xenodm/authdir/authfiles/* /var/run/xenodm/authdir/authfiles/*; do
         [ -f "$cookie" ] || continue
         if XAUTHORITY="$cookie" /usr/X11R6/bin/xwininfo -root -tree 2>/dev/null |
             grep -i '"xlogin"' ; then
@@ -30,20 +41,47 @@ for attempt in $(jot 90); do
     sleep 2
 done
 echo 'xenodm did not present the Xlogin window' >&2
-tail -20 /var/log/xenodm.log >&2
+echo '/var/log/xenodm.log:' >&2
+tail -10 /var/log/xenodm.log | cut -c1-150 >&2
+echo '/var/log/Xorg.0.log (warnings and errors):' >&2
+if [ -r /var/log/Xorg.0.log ]; then
+    awk '/\((EE|WW)\)|[Ff]atal|[Nn]o screens|[Aa]perture|[Pp]ermission denied/ {
+        print substr($0, 1, 170)
+    }' /var/log/Xorg.0.log | tail -10 >&2
+else
+    echo 'No Xorg.0.log file exists or it cannot be read.' >&2
+fi
 exit 1
 """
 
 SESSION = r"""
 set -eu
 export DISPLAY=:0 XAUTHORITY="$HOME/.Xauthority"
+missing=0
 for program in xfce4-session xfwm4 xfce4-panel xfdesktop; do
-    pgrep -x -u "$(id -u)" "$program" >/dev/null
-    echo "$program is running as $(id -un)"
+    if pids=$(pgrep -x -u "$(id -u)" "$program"); then
+        echo "$program is running as $(id -un) (PID $pids)"
+    else
+        echo "$program has no PID for $(id -un)" >&2
+        missing=1
+    fi
 done
+[ "$missing" -eq 0 ] || exit 1
 wm=$(/usr/X11R6/bin/xprop -root _NET_SUPPORTING_WM_CHECK | awk '{print $NF}')
 /usr/X11R6/bin/xprop -id "$wm" _NET_WM_NAME | grep -i xfwm4
 /usr/X11R6/bin/xwininfo -root | grep -e Width: -e Height:
+"""
+
+SESSION_ERRORS = r"""
+if [ -r "$HOME/.xsession-errors" ]; then
+    echo 'Last messages from desktop ~/.xsession-errors:'
+    tail -40 "$HOME/.xsession-errors" | awk '
+        tolower($0) !~ /password|credential|cookie|authorization|secret|token/ {
+            print substr($0, 1, 200)
+        }' | tail -12
+else
+    echo 'Desktop ~/.xsession-errors was not created or is unreadable.'
+fi
 """
 
 TERMINAL = r"""
@@ -78,6 +116,14 @@ def log(message):
     print(message, flush=True)
 
 
+def redact(message):
+    # Replace complete credentials before clipping output at a diagnostic size limit.
+    for name in ("ROOT_PASSWORD", "DESKTOP_PASSWORD"):
+        if value := os.environ.get(name):
+            message = message.replace(value, "[redacted]")
+    return message
+
+
 def wait_for(description, probe, deadline, pause=3):
     log(description)
     detail = "no response"
@@ -91,7 +137,7 @@ def wait_for(description, probe, deadline, pause=3):
                 return result.stdout.strip()
             detail = (result.stderr or result.stdout or f"exit {result.returncode}").strip()
         time.sleep(pause)
-    raise RuntimeError(f"{description} timed out. Last result: {detail[-1200:]}")
+    raise RuntimeError(f"{description} timed out. Last result: {redact(detail)[-1200:]}")
 
 
 class Monitor:
@@ -182,6 +228,7 @@ class Guest:
             session.close()
             return subprocess.CompletedProcess("su", session.exitstatus, output, "")
 
+
 def available_port():
     with socket.socket() as port:
         port.bind(("127.0.0.1", 0))
@@ -206,8 +253,9 @@ def connect_monitor(path, qemu):
 
 def checked(result, description):
     if result.returncode != 0:
+        detail = redact((result.stderr or result.stdout or "").strip())
         raise RuntimeError(f"{description} failed ({result.returncode}): "
-                           f"{(result.stderr or result.stdout or '').strip()[-1500:]}")
+                           f"{detail[-4000:]}")
     return result.stdout.strip()
 
 
@@ -219,7 +267,10 @@ def verify(guest, monitor, temporary, evidence, password, deadline):
     start = wait_for("Booting the installed disk and checking SSH", lambda:
                      guest.run("sysctl -n kern.boottime"), phase(600))
     log("Checking for the xenodm login window")
-    report.append(checked(guest.root(GREETER, timeout=200), "Checking xenodm"))
+    try:
+        report.append(checked(guest.root(GREETER, timeout=200), "Checking xenodm"))
+    finally:
+        monitor.screenshot(temporary / "greeter.ppm", evidence / "before-login.png")
     checked(guest.run('! pgrep -x -u "$(id -u)" xfce4-session >/dev/null'),
             "Checking for a fresh login")
     monitor.type_text("desktop")
@@ -228,8 +279,16 @@ def verify(guest, monitor, temporary, evidence, password, deadline):
     monitor.type_text(password)
     monitor.key("ret")
 
-    report.append(wait_for("Checking Xfce processes and its X11 window manager",
-                           lambda: guest.run(SESSION), phase(240)))
+    try:
+        report.append(wait_for("Checking Xfce processes and its X11 window manager",
+                               lambda: guest.run(SESSION), phase(240)))
+    except RuntimeError as failure:
+        try:
+            result = guest.run(SESSION_ERRORS, timeout=15)
+            detail = redact(result.stdout or result.stderr or "No diagnostic output.").strip()
+        except (OSError, subprocess.TimeoutExpired):
+            detail = "SSH could not read desktop's ~/.xsession-errors."
+        raise RuntimeError(f"{failure}\n{detail}") from None
     work = checked(guest.run("mktemp -d /tmp/desktop-proof.XXXXXXXX"), "Creating guest work directory")
     title = "OpenBSD desktop verification"
     command = shlex.join(["/usr/X11R6/bin/xterm", "-T", title, "-geometry", "65x8+48+85",
@@ -247,7 +306,7 @@ def verify(guest, monitor, temporary, evidence, password, deadline):
     log("Rebooting OpenBSD and checking for a new boot and login window")
     # The SSH transport can disappear while shutdown is in progress. Confirm using the guest's clock.
     reboot = guest.root("/sbin/shutdown -r now", timeout=60)
-    if reboot.returncode not in (0, 255):
+    if reboot.returncode not in (0, 255, None):
         checked(reboot, "Requesting a guest reboot")
     new_boot = (f'boot=$(sysctl -n kern.boottime) && [ -n "$boot" ] '
                 f'&& [ "$boot" != {shlex.quote(start)} ] && echo "$boot"')
@@ -264,6 +323,8 @@ def main():
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--timeout", type=int, default=1800, help="total time budget in seconds")
     args = parser.parse_args()
+    if args.timeout < 1:
+        parser.error("--timeout must be positive")
     disk = args.disk.resolve(strict=True)
     evidence = args.evidence.resolve()
     evidence.mkdir(parents=True, exist_ok=True)
@@ -296,7 +357,12 @@ def main():
         with (evidence / "qemu.log").open("w") as diagnostics:
             qemu = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=diagnostics,
                                     stderr=subprocess.STDOUT)
+            def expire(_signum, _frame):
+                raise TimeoutError(f"Verification exceeded its {args.timeout}-second time budget")
+
             try:
+                signal.signal(signal.SIGALRM, expire)
+                signal.alarm(args.timeout)
                 with connect_monitor(monitor_path, qemu) as connection:
                     monitor = Monitor(connection)
                     try:
@@ -304,6 +370,7 @@ def main():
                     finally:
                         monitor.stream.close()
             finally:
+                signal.alarm(0)
                 if qemu.poll() is None:
                     qemu.terminate()
                     try:
@@ -320,7 +387,4 @@ if __name__ == "__main__":
             pexpect.ExceptionPexpect) as error:
         # Timeout tracebacks can include terminal buffers. Keep credentials out of diagnostics.
         message = str(error) if not isinstance(error, pexpect.ExceptionPexpect) else type(error).__name__
-        for secret in ("ROOT_PASSWORD", "DESKTOP_PASSWORD"):
-            if value := os.environ.get(secret):
-                message = message.replace(value, "[redacted]")
-        sys.exit(f"Desktop verification failed: {message}")
+        sys.exit(f"Desktop verification failed: {redact(message)}")

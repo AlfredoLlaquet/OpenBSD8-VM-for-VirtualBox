@@ -81,7 +81,8 @@ IPv6 address for em0 = none
 Network interface to configure = done
 Password for root account = {passwd_hash(root_password)}
 Start sshd(8) by default = yes
-Do you want the X Window System to be started by xenodm(1) = no
+Do you expect to run the X Window System = yes
+Do you want the X Window System to be started by xenodm(1) = yes
 Change the default console to com0 = yes
 Which speed should com0 use = 115200
 Setup a user = desktop
@@ -94,7 +95,7 @@ Encrypt the root disk = no
 Use (W)hole disk MBR = whole
 URL to autopartitioning template for disklabel = {base_url}/layout
 Location of sets = cd0
-Set name(s) = done
+Set name(s) = all
 Continue without verification = yes
 Location of sets = done
 Exit to (S)hell, (H)alt or (R)eboot = reboot
@@ -128,7 +129,8 @@ def build_server(root_password, desktop_password):
             b"/ 1G-2G 5%\nswap 512M\n/tmp 256M-2G 5%\n/var 768M-4G 10%\n"
             b"/usr 3G-10G 20%\n/usr/local 4G-* 45%\n/home 1G-* 15%\n"
         )
-        files[prefix + "/provision.sh"] = (Path(__file__).parent / "guest/provision.sh").read_bytes()
+        for stage in ("packages", "provision"):
+            files[f"{prefix}/{stage}.sh"] = (Path(__file__).parent / "guest" / f"{stage}.sh").read_bytes()
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
         try:
@@ -198,10 +200,16 @@ def machine(disk, options, transcript, iso=None, monitor=None):
         transcript.flush()
 
 
-def expect(child, pattern, timeout, description):
-    result = child.expect([pattern, pexpect.EOF, pexpect.TIMEOUT], timeout=timeout)
+def expect(child, pattern, timeout, description, failure_patterns=()):
+    result = child.expect([pattern, pexpect.EOF, pexpect.TIMEOUT, r"(?im)^panic:", *failure_patterns],
+                          timeout=timeout)
     if result:
-        cause = "QEMU exited" if result == 1 else "time limit reached"
+        if result == 1:
+            cause = "QEMU exited"
+        elif result == 2:
+            cause = "time limit reached"
+        else:
+            cause = child.match.group(0).strip()
         raise RuntimeError(f"{description}: {cause}. See the serial transcript.")
     return child.match
 
@@ -246,6 +254,7 @@ def select_serial_console(child, monitor_path, vga_dump, timeout):
 
             command("qmp_capabilities")
             command("cont")
+            screen = b""
             while time.monotonic() < deadline:
                 command("pmemsave", val=0xB8000, size=80 * 25 * 2, filename=str(vga_dump))
                 screen = vga_dump.read_bytes()[::2]
@@ -271,27 +280,66 @@ def install_system(disk, media, base_url, options, transcript):
             expect(child, r"Response file location\?", options.boot_timeout, "Locating install answers")
             child.send(base_url + "/install.conf\r")
             expect(child, r"Your OpenBSD install has been successfully completed",
-                   options.install_timeout, "Installing OpenBSD and X sets")
+                   options.install_timeout, "Installing OpenBSD and X sets",
+                   (r"(?i)question has no answer", r"(?i)autopartitioning failed",
+                    r"(?i)autoinstall failed", r"\(A\)utoinstall or \(S\)hell\?"))
             # -no-reboot makes the installer's reboot a clean QEMU exit.
             wait_clean_exit(child, options.boot_timeout)
 
 
-def configure_desktop(disk, base_url, root_password, options, transcript):
-    log("Booting the installed disk with the CD removed to configure Xfce")
+def run_guest_stages(disk, base_url, root_password, options, transcript, stages):
+    log(f"Booting the installed disk with the CD removed for {', '.join(stages)}")
     with machine(disk, options, transcript) as child:
         expect(child, r"(?im)^.*login:\s*$", options.boot_timeout, "Booting the installed OS")
         child.send("root\r")
         expect(child, r"(?i)password:", 30, "Opening the local root session")
         child.send(root_password + "\r")
-        expect(child, PROMPT, 90, "Authenticating on the serial console")
-        cmd = f"ftp -V -o /tmp/obsd-provision.sh '{base_url}/provision.sh' && sh /tmp/obsd-provision.sh"
-        child.send(cmd + "; printf '\\nOBSD_%s=%d\\n' RESULT $?\r")
-        status = expect(child, r"(?m)^OBSD_RESULT=(\d+)\r?$", options.package_timeout,
-                        "Installing and configuring the Xfce packages")
-        if status.group(1) != "0":
-            raise RuntimeError(f"Desktop provisioning exited with status {status.group(1)}.")
+        expect(child, PROMPT, 90, "Authenticating on the serial console",
+               (r"(?i)login incorrect",))
+        for stage in stages:
+            path = f"/tmp/obsd-{stage}.sh"
+            tag = stage.upper()
+            # Splitting the marker in printf keeps the echoed command distinct
+            # from its result. A serial/PTY pair can emit CRLF or CRCRLF.
+            child.send(f"ftp -V -o {path} '{base_url}/{stage}.sh' && sh {path}; "
+                       f"rc=$?; rm -f {path}; printf '\\nOBSD_%s_RESULT=%d\\n' {tag} \"$rc\"\r")
+            pattern = rf"(?:^|[\r\n])OBSD_{tag}_RESULT=([0-9]+)(?=[\r\n])"
+            status = expect(child, pattern, options.package_timeout, f"Running guest stage {stage}")
+            if status.group(1) != "0":
+                raise RuntimeError(f"Guest stage {stage} exited with status {status.group(1)}.")
+            log(f"Guest stage {stage} completed.")
         child.send("halt -p\r")
         wait_clean_exit(child, options.boot_timeout)
+
+
+def check_disk(path):
+    subprocess.run(["qemu-img", "check", "-q", "-f", "qcow2", str(path)], check=True)
+
+
+def install_new_disk(path, url, options, transcript):
+    media = official_media(options.work_dir.resolve() / "media")
+    subprocess.run(["qemu-img", "create", "-f", "qcow2", str(path), options.disk_size], check=True)
+    install_system(path, media, url, options, transcript)
+
+
+def package_checkpoint(checkpoint, url, password, options, transcript):
+    if checkpoint.exists():
+        info = subprocess.check_output(["qemu-img", "info", "--output=json", str(checkpoint)])
+        metadata = json.loads(info)
+        if metadata.get("format") != "qcow2" or metadata.get("backing-filename"):
+            raise ValueError(f"Checkpoint must be a standalone qcow2 file: {checkpoint}")
+        check_disk(checkpoint)
+        log(f"Using powered-off package checkpoint: {checkpoint}")
+        return
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=checkpoint.parent, prefix=".obsd-packages-") as tmp:
+        source = Path(tmp) / "packages.qcow2"
+        install_new_disk(source, url, options, transcript)
+        run_guest_stages(source, url, password, options, transcript, ("packages",))
+        check_disk(source)
+        # Same filesystem, atomic, and cannot overwrite another build's result.
+        os.link(source, checkpoint)
+    log(f"Saved clean powered-off package checkpoint: {checkpoint}")
 
 
 def arguments():
@@ -299,6 +347,9 @@ def arguments():
     parser.add_argument("--output", type=Path, default=Path("build/openbsd-xfce.qcow2"))
     parser.add_argument("--work-dir", type=Path, default=Path("build/guest"),
                         help="Directory for the verified ISO cache and serial log.")
+    parser.add_argument("--checkpoint", type=Path,
+                        help="Create or reuse a standalone qcow2 after packages are installed. "
+                             "Resume with the same root and desktop passwords.")
     parser.add_argument("--disk-size", default="16G", help="Guest disk size, at least 12G.")
     parser.add_argument("--memory", type=int, default=3072, help="Guest RAM in MiB.")
     parser.add_argument("--accel", choices=["auto", "kvm", "tcg"], default="auto")
@@ -323,18 +374,31 @@ def build():
     output = options.output.resolve()
     if output.exists():
         raise FileExistsError(f"Output already exists: {output}")
+    checkpoint = options.checkpoint.resolve() if options.checkpoint else None
+    if checkpoint == output:
+        raise ValueError("Output and checkpoint must be different files.")
     work = options.work_dir.resolve()
     work.mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
-    media = official_media(work / "media")
     with tempfile.TemporaryDirectory(dir=output.parent, prefix=".obsd-install-") as staging:
-        disk = Path(staging) / "guest.qcow2"
-        subprocess.run(["qemu-img", "create", "-f", "qcow2", str(disk), options.disk_size], check=True)
+        directory = Path(staging)
+        disk = directory / "guest.qcow2"
         with (work / "serial.log").open("w") as logfile, build_server(root_password, desktop_password) as url:
             transcript = Transcript(logfile, (root_password, desktop_password))
-            install_system(disk, media, url, options, transcript)
-            configure_desktop(disk, url, root_password, options, transcript)
-        subprocess.run(["qemu-img", "check", "-q", "-f", "qcow2", str(disk)], check=True)
+            if checkpoint:
+                package_checkpoint(checkpoint, url, root_password, options, transcript)
+                # A writable overlay keeps the checkpoint intact if customization
+                # fails. Flatten only the finished guest for packaging.
+                overlay = directory / "customization.qcow2"
+                subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", "-F", "qcow2", "-b",
+                                str(checkpoint), str(overlay)], check=True)
+                run_guest_stages(overlay, url, root_password, options, transcript, ("provision",))
+                subprocess.run(["qemu-img", "convert", "-f", "qcow2", "-O", "qcow2",
+                                str(overlay), str(disk)], check=True)
+            else:
+                install_new_disk(disk, url, options, transcript)
+                run_guest_stages(disk, url, root_password, options, transcript, ("packages", "provision"))
+        check_disk(disk)
         os.link(disk, output)
     log(f"Power-off verified; guest disk ready: {output}")
 
