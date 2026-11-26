@@ -1,0 +1,69 @@
+name: Build OpenBSD Xfce for VirtualBox
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - build_guest.py
+      - guest/**
+      - verify_desktop.py
+      - make_disk.sh
+      - VirtualBox.txt
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 310
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install the emulator and build tools
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils seabios curl openssh-client openssl signify-openbsd python3-pexpect python3-bcrypt python3-pil zip unzip
+          if [[ -c /dev/kvm && ! -w /dev/kvm ]]; then
+            sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          fi
+          qemu-system-x86_64 --version
+          df -h "$RUNNER_TEMP"
+
+      - name: Install OpenBSD, boot the exported disk, test Xfce, and package the image
+        run: bash make_disk.sh "$RUNNER_TEMP/delivery"
+
+      - name: Publish the verified disk in this private repository
+        if: github.event.repository.private == true
+        id: release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="openbsd-8.0-xfce-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cd "$RUNNER_TEMP/delivery"
+          gh release create "$tag" OpenBSD-8.0-Xfce-amd64.zip OpenBSD-8.0-Xfce-amd64.zip.sha256 \
+            --target "$GITHUB_SHA" --title 'OpenBSD 8.0 with Xfce for VirtualBox (amd64)' \
+            --notes 'Extract the ZIP. It contains the installed VDI, the VirtualBox settings, the initial login credentials, and a SHA-256 checksum. The disk was booted and the Xfce desktop was tested with QEMU.'
+
+      - name: Deliver the disk as a workflow download if release publication failed
+        if: github.event.repository.private == true && steps.release.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenBSD-8.0-Xfce-amd64
+          path: ${{ runner.temp }}/delivery/OpenBSD-8.0-Xfce-amd64.zip*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Retain graphical verification evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-verification-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/delivery/evidence/*.png
+          if-no-files-found: ignore
+          retention-days: 7
