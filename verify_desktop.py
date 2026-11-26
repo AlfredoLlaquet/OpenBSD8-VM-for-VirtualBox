@@ -42,12 +42,11 @@ for attempt in $(jot 90); do
 done
 echo 'xenodm did not present the Xlogin window' >&2
 echo '/var/log/xenodm.log:' >&2
-tail -10 /var/log/xenodm.log | cut -c1-150 >&2
+tail -10 /var/log/xenodm.log >&2
 echo '/var/log/Xorg.0.log (warnings and errors):' >&2
 if [ -r /var/log/Xorg.0.log ]; then
-    awk '/\((EE|WW)\)|[Ff]atal|[Nn]o screens|[Aa]perture|[Pp]ermission denied/ {
-        print substr($0, 1, 170)
-    }' /var/log/Xorg.0.log | tail -10 >&2
+    grep -Ei '\((EE|WW)\)|fatal|no screens|aperture|permission denied' /var/log/Xorg.0.log |
+        tail -10 >&2
 else
     echo 'No Xorg.0.log file exists or it cannot be read.' >&2
 fi
@@ -75,10 +74,8 @@ wm=$(/usr/X11R6/bin/xprop -root _NET_SUPPORTING_WM_CHECK | awk '{print $NF}')
 SESSION_ERRORS = r"""
 if [ -r "$HOME/.xsession-errors" ]; then
     echo 'Last messages from desktop ~/.xsession-errors:'
-    tail -40 "$HOME/.xsession-errors" | awk '
-        tolower($0) !~ /password|credential|cookie|authorization|secret|token/ {
-            print substr($0, 1, 200)
-        }' | tail -12
+    tail -40 "$HOME/.xsession-errors" |
+        grep -Eiv 'password|credential|cookie|authorization|secret|token' | tail -12
 else
     echo 'Desktop ~/.xsession-errors was not created or is unreadable.'
 fi
@@ -288,7 +285,7 @@ def verify(guest, monitor, temporary, evidence, password, deadline):
             detail = redact(result.stdout or result.stderr or "No diagnostic output.").strip()
         except (OSError, subprocess.TimeoutExpired):
             detail = "SSH could not read desktop's ~/.xsession-errors."
-        raise RuntimeError(f"{failure}\n{detail}") from None
+        raise RuntimeError(f"{failure}\n{detail[:3500]}") from None
     work = checked(guest.run("mktemp -d /tmp/desktop-proof.XXXXXXXX"), "Creating guest work directory")
     title = "OpenBSD desktop verification"
     command = shlex.join(["/usr/X11R6/bin/xterm", "-T", title, "-geometry", "65x8+48+85",

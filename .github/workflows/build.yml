@@ -29,6 +29,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Make room for the package checkpoint, virtual disk, and ZIP on the hosted runner
+        if: runner.environment == 'github-hosted'
+        run: |
+          for toolchain in /usr/local/lib/android/sdk /usr/share/dotnet /usr/local/.ghcup; do
+            available_kib=$(df -Pk "$RUNNER_TEMP" | awk 'END {print $4}')
+            if (( available_kib >= 24 * 1024 * 1024 )); then break; fi
+            if [[ -d $toolchain ]]; then
+              echo "Reclaiming the preinstalled $toolchain toolchain on this disposable VM"
+              sudo rm -rf -- "$toolchain"
+            fi
+          done
+          df -h "$RUNNER_TEMP"
+
       - name: Install the emulator and build tools
         run: |
           sudo apt-get -qq update

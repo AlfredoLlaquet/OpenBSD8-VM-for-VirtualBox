@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install OpenBSD 8.0/amd64 and Xfce on a new QEMU qcow2 disk."""
+"""Install OpenBSD 8.0/amd64 and Xfce, then export a standalone virtual disk."""
 
 import argparse
 import contextlib
@@ -345,6 +345,7 @@ def package_checkpoint(checkpoint, url, password, options, transcript):
 def arguments():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("build/openbsd-xfce.qcow2"))
+    parser.add_argument("--output-format", choices=["qcow2", "vdi"], default="qcow2")
     parser.add_argument("--work-dir", type=Path, default=Path("build/guest"),
                         help="Directory for the verified ISO cache and serial log.")
     parser.add_argument("--checkpoint", type=Path,
@@ -382,24 +383,29 @@ def build():
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=output.parent, prefix=".obsd-install-") as staging:
         directory = Path(staging)
-        disk = directory / "guest.qcow2"
+        source = directory / "guest.qcow2"
         with (work / "serial.log").open("w") as logfile, build_server(root_password, desktop_password) as url:
             transcript = Transcript(logfile, (root_password, desktop_password))
             if checkpoint:
                 package_checkpoint(checkpoint, url, root_password, options, transcript)
-                # A writable overlay keeps the checkpoint intact if customization
-                # fails. Flatten only the finished guest for packaging.
-                overlay = directory / "customization.qcow2"
+                # The standalone checkpoint stays clean while configuration writes to this overlay.
                 subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", "-F", "qcow2", "-b",
-                                str(checkpoint), str(overlay)], check=True)
-                run_guest_stages(overlay, url, root_password, options, transcript, ("provision",))
-                subprocess.run(["qemu-img", "convert", "-f", "qcow2", "-O", "qcow2",
-                                str(overlay), str(disk)], check=True)
+                                str(checkpoint), str(source)], check=True)
+                run_guest_stages(source, url, root_password, options, transcript, ("provision",))
             else:
-                install_new_disk(disk, url, options, transcript)
-                run_guest_stages(disk, url, root_password, options, transcript, ("packages", "provision"))
-        check_disk(disk)
-        os.link(disk, output)
+                install_new_disk(source, url, options, transcript)
+                run_guest_stages(source, url, root_password, options, transcript, ("packages", "provision"))
+        check_disk(source)
+        if checkpoint or options.output_format != "qcow2":
+            exported = directory / f"standalone.{options.output_format}"
+            log(f"Exporting directly to {options.output_format} and comparing all guest-visible sectors.")
+            subprocess.run(["qemu-img", "convert", "-f", "qcow2", "-O", options.output_format,
+                            str(source), str(exported)], check=True)
+            subprocess.run(["qemu-img", "compare", "-f", "qcow2", "-F", options.output_format,
+                            str(source), str(exported)], check=True)
+        else:
+            exported = source
+        os.link(exported, output)
     log(f"Power-off verified; guest disk ready: {output}")
 
 

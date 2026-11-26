@@ -36,12 +36,8 @@ fi
 export DESKTOP_PASSWORD="$desktop_password" ROOT_PASSWORD="$root_password"
 
 cd "$project_dir"
-/usr/bin/python3 -u build_guest.py --output "$work_dir/installed.qcow2" --work-dir "$work_dir/guest" --checkpoint "$checkpoint_disk" --disk-size 16G --memory 3072
-
-printf '\nConverting the installed disk to VDI and comparing guest-visible sectors.\n'
-qemu-img convert -f qcow2 -O vdi "$work_dir/installed.qcow2" "$bundle_dir/$disk_name.vdi"
-qemu-img compare -f qcow2 -F vdi "$work_dir/installed.qcow2" "$bundle_dir/$disk_name.vdi"
-rm -- "$work_dir/installed.qcow2"
+/usr/bin/python3 -u build_guest.py --output "$bundle_dir/$disk_name.vdi" --output-format vdi \
+  --work-dir "$work_dir/guest" --checkpoint "$checkpoint_disk" --disk-size 16G --memory 3072
 (cd "$bundle_dir" && sha256sum "$disk_name.vdi" > SHA256SUMS)
 
 /usr/bin/python3 -u verify_desktop.py --disk "$bundle_dir/$disk_name.vdi" --evidence "$output_dir/evidence"
