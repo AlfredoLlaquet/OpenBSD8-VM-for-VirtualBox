@@ -11,3 +11,9 @@ printf '[org/gnome/login-screen]\ndisable-user-list=true\n' > "$etc/dconf/db/gdm
 dconf update "$etc/dconf/db"
 [ "$(DCONF_PROFILE="$profile" dconf read /org/gnome/login-screen/disable-user-list)" = true ]
 printf 'yes\n' > /home/desktop/.config/gnome-initial-setup-done
+# A preinstalled desktop opens straight into the workspace. The Tour remains
+# available in Activities whenever the desktop account chooses to launch it.
+version=$(gnome-shell --version | awk '{print $NF}')
+case "$version" in [0-9]*) ;; *) exit 1 ;; esac
+su -l desktop -c "/usr/local/bin/dbus-run-session -- /usr/local/bin/gsettings set org.gnome.shell welcome-dialog-last-shown-version '$version'"
+su -l desktop -c '/usr/local/bin/gsettings get org.gnome.shell welcome-dialog-last-shown-version' | grep -Fx "'$version'"

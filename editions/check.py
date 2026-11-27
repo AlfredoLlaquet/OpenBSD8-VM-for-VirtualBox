@@ -34,6 +34,7 @@ umask 077
 qa="$HOME/.mvm-display-test"
 printf '%s\n' "$DISPLAY" > "$qa/display"
 printf '%s\n' "${XAUTHORITY:-$HOME/.Xauthority}" > "$qa/authority"
+printf '%s\n' "$DBUS_SESSION_BUS_ADDRESS" > "$qa/bus"
 touch "$qa/ready"
 while [ ! -f "$qa/terminal" ]; do sleep 1; done
 exec xterm -geometry 80x24+30+45 -title 'Desktop terminal test'
@@ -81,6 +82,15 @@ def verify(args, guest, keyboard, evidence):
     def greeter():
         code = GDM if args.edition == "gnome" else XLOGIN
         return until("Waiting for graphical login", lambda: guest.root(PATH + code, 30), 260)
+
+    def close_activities():
+        # During GNOME's overview the shell owns the keyboard grab even if an
+        # X11 application is mapped and has X input focus.
+        prefix = 'export DBUS_SESSION_BUS_ADDRESS="$(cat "$HOME/.mvm-display-test/bus")"; '
+        call = "gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties."
+        must(prefix + call + "Set org.gnome.Shell OverviewActive '<false>'")
+        until("Leaving the GNOME Activities overview",
+              lambda: user(prefix + call + "Get org.gnome.Shell OverviewActive | grep -F '<false>'"), 45)
 
     def snap(name, *, password_prompt=False):
         # GDM replaces the greeter X server during login. VirtualBox can report
@@ -172,7 +182,7 @@ def verify(args, guest, keyboard, evidence):
             xenv = f'export DISPLAY="$(cat {qa}/display)" XAUTHORITY="$(cat {qa}/authority)"; '
             until("Waiting for the Plasma panel to appear", lambda: user(xenv + panel), 150)
         else:
-            keyboard.key("esc")
+            close_activities()
     time.sleep(4)
     snap("desktop")
     if args.smoke:
@@ -201,6 +211,8 @@ def verify(args, guest, keyboard, evidence):
         keyboard.type_text("xterm")
         keyboard.key("ret")
     until("Checking the terminal launched from the graphical desktop", lambda: user(processes(["xterm"])), 95)
+    if args.edition == "gnome":
+        close_activities()
     time.sleep(2)
     marker = "/tmp/mvm-proof-" + secrets.token_hex(5)
     probe = f"grep -Fx desktop {marker} >/dev/null && grep '^/dev/' {marker}"
@@ -216,7 +228,10 @@ def verify(args, guest, keyboard, evidence):
             must(f'printf %s {shlex.quote(focus)} > {qa}/focus.c && '
                  f'cc -I/usr/X11R6/include -I/usr/local/include -L/usr/X11R6/lib -L/usr/local/lib '
                  f'-o {qa}/focus {qa}/focus.c -lX11')
-            keyboard.key("esc")
+            if args.edition == "gnome":
+                close_activities()
+            else:
+                keyboard.key("esc")
             must(xenv + f'win=$(xwininfo -root -tree | awk \'/"Desktop terminal test"/ {{print $1; exit}}\'); {qa}/focus "$win"')
         else:
             keyboard.key("esc")
