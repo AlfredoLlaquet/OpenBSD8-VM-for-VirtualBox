@@ -41,9 +41,18 @@ case "$patch_status" in
     *) echo "Neither official mirror completed the OpenBSD 8.0 patch check." >&2; exit "$patch_status" ;;
 esac
 printf '%s\n' 'https://cdn.openbsd.org/pub/OpenBSD' > /etc/installurl
+case "${MVM_EDITION:-xfce}" in
+    xfce) set -- xfce dbus consolekit2 polkit ;;
+    gnome) set -- gnome gdm firefox dbus consolekit2 polkit ;;
+    plasma) set -- kde-plasma kwin-x11 dolphin konsole firefox dbus consolekit2 polkit ;;
+    cwm) set -- dmenu tint2 pcmanfm-qt mc picom conky-- feh dunst scrot parcellite \
+        lxappearance vim-- geany firefox zathura zathura-pdf-poppler mpv fastfetch \
+        jetbrains-mono qt6ct adwaita-qt6 gnome-themes-extra adwaita-icon-theme dbus ;;
+    *) echo "Unknown edition: $MVM_EDITION" >&2; exit 1 ;;
+esac
 for attempt in 1 2 3; do
-    if pkg_add -I xfce dbus consolekit2 polkit; then
-        echo "OpenBSD's package manager finished installing Xfce and its session services."
+    if pkg_add -I "$@"; then
+        echo "Installed the selected desktop packages."
         exit 0
     else
         result=$?

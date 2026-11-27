@@ -1,0 +1,55 @@
+name: Prepare desktop packages
+on:
+  push:
+    paths:
+      - .github/workflows/prepare.yml
+  workflow_dispatch:
+    inputs:
+      edition:
+        type: choice
+        options: [all, cwm, gnome, plasma]
+        default: all
+        description: Edition to prepare
+permissions:
+  contents: read
+jobs:
+  prepare:
+    name: Prepare ${{ matrix.edition }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 280
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: ${{ fromJSON((inputs.edition == '' || inputs.edition == 'all') && '["cwm","gnome","plasma"]' || format('["{0}"]', inputs.edition)) }}
+    env:
+      DESKTOP_PASSWORD: OpenSesame
+      ROOT_PASSWORD: CheckOut_TheCrumbs.org
+      EDITION: ${{ matrix.edition }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Prepare the disposable build host
+        run: bash editions/host.sh
+      - name: Install the operating system and its desktop packages
+        run: /usr/bin/python3 -u editions/checkpoint.py "$EDITION" "$RUNNER_TEMP/build"
+      - name: Compress and checksum the powered-off checkpoint
+        run: |
+          mkdir -p "$RUNNER_TEMP/checkpoint"
+          cd "$RUNNER_TEMP/checkpoint"
+          qemu-img convert -c -p -O qcow2 "$RUNNER_TEMP/build/packages.qcow2" packages.qcow2
+          qemu-img compare "$RUNNER_TEMP/build/packages.qcow2" packages.qcow2
+          sha256sum packages.qcow2 > SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages-${{ matrix.edition }}
+          path: ${{ runner.temp }}/checkpoint/
+          retention-days: 2
+          compression-level: 0
+      - name: Retain installation diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: install-log-${{ matrix.edition }}
+          path: ${{ runner.temp }}/build/serial.log
+          retention-days: 2

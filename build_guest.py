@@ -71,10 +71,10 @@ def passwd_hash(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=10)).decode()
 
 
-def installer_answers(base_url, root_password, desktop_password):
+def installer_answers(base_url, root_password, desktop_password, edition="xfce"):
     # The install CD is authenticated as a whole before QEMU can boot it.
     # OpenBSD omits an individual SHA256.sig from its full install ISO.
-    return f"""System hostname = obsd-xfce
+    return f"""System hostname = obsd-{edition}
 Network interface to configure = em0
 IPv4 address for em0 = autoconf
 IPv6 address for em0 = none
@@ -103,7 +103,7 @@ Exit to (S)hell, (H)alt or (R)eboot = reboot
 
 
 @contextlib.contextmanager
-def build_server(root_password, desktop_password):
+def build_server(root_password, desktop_password, edition="xfce"):
     # Guest access to a loopback-only host listener through QEMU user networking.
     prefix = "/" + secrets.token_hex(16)
     files = {}
@@ -124,13 +124,14 @@ def build_server(root_password, desktop_password):
 
     with http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
         base_url = f"http://10.0.2.2:{server.server_port}{prefix}"
-        files[prefix + "/install.conf"] = installer_answers(base_url, root_password, desktop_password)
+        files[prefix + "/install.conf"] = installer_answers(base_url, root_password, desktop_password, edition)
         files[prefix + "/layout"] = (
             b"/ 1G-2G 5%\nswap 512M\n/tmp 256M-2G 5%\n/var 768M-4G 10%\n"
             b"/usr 3G-10G 20%\n/usr/local 4G-* 45%\n/home 1G-* 15%\n"
         )
         for stage in ("packages", "provision"):
-            files[f"{prefix}/{stage}.sh"] = (Path(__file__).parent / "guest" / f"{stage}.sh").read_bytes()
+            script = (Path(__file__).parent / "guest" / f"{stage}.sh").read_bytes()
+            files[f"{prefix}/{stage}.sh"] = f"export MVM_EDITION={edition}\n".encode() + script
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
         try:
