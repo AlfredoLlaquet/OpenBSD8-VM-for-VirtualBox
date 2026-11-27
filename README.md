@@ -8,12 +8,12 @@ Created and directed by **Alfredo Llaquet-Alsina**. Implemented by **ChatGPT**.
 
 ## Choose your desktop
 
-3 of the four editions are available. The remaining disks are being built and tested.
+All four disks were tested in **VirtualBox 7.2.22**. The download size includes every archive part.
 
 | Edition | What you get | Recommended RAM | Download |
 | --- | --- | ---: | --- |
 | Xfce | A familiar panel, applications menu, and Thunar file manager. | 3 GiB | [ZIP · 1.49 GB](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-xfce-public-45953251746-1/OpenBSD-8.0-Xfce-amd64.zip) |
-| GNOME | An Activities overview, searchable apps, and the Files browser. | 6 GiB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
+| GNOME | An Activities overview, searchable apps, and the Files browser. | 6 GiB | [1 part · 1.52 GB](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-gnome-46052866705-1) |
 | KDE Plasma | A customizable panel, Dolphin file manager, and Konsole terminal. | 6 GiB | [2 parts · 2.45 GB](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-plasma-46052053042-1) |
 | cwm | A charcoal desktop with keyboard shortcuts, a slim panel, and a live system monitor. | 3 GiB | [1 part · 1.30 GB](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-cwm-46047375931-1) |
 
@@ -59,11 +59,20 @@ The original Xfce disk was tested in VirtualBox 7.2.22 on FreeBSD 15 and Ubuntu 
 
 Press **Super** (the Windows or Command key sent to the guest) for the Activities overview. Start typing an application name to find it. **Files** opens your home folder. Search for **Tour** for a guided introduction. The system menu at the top right contains the power controls.
 
+GNOME Shell `49.10p2`. The extracted VDI initially occupies **7.1 GB** on the host and can grow to **48 GiB**. Use **6 GiB** for GNOME. At **4 GiB**, the greeter appeared, but the user’s GNOME Shell did not start within the five-minute check. [Release files and verification report.](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-gnome-46052866705-1)
+
+<details>
+<summary>View the GNOME desktop</summary>
+
+![OpenBSD with GNOME running in VirtualBox](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-gnome-46052866705-1/desktop.png)
+
+</details>
+
 ### KDE Plasma
 
 Use the application launcher on the panel or press **Alt+Space** to search. **Dolphin** manages files, **Konsole** opens a terminal, and **System Settings** controls the desktop’s appearance.
 
-Plasma Workspace `6.7.5`. The extracted VDI initially occupies **10.6 GB** on the host and can grow to **48 GiB**. [Release files and verification report.](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-plasma-46052053042-1)
+Plasma Workspace `6.7.5`. The extracted VDI initially occupies **10.6 GB** on the host and can grow to **48 GiB**. At **4 GiB**, one test reached the desktop and another showed the wallpaper without its panel. Use **6 GiB** for Plasma. [Release files and verification report.](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-plasma-46052053042-1)
 
 <details>
 <summary>View the KDE Plasma desktop</summary>
