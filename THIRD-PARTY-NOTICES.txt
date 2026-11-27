@@ -1,0 +1,13 @@
+License scope
+
+The Unlicense in LICENSE covers this project's original build and verification
+scripts, configuration, workflows, and documentation.
+
+The virtual disk contains OpenBSD, Xfce, and other third-party software. Those
+components retain their respective licenses and copyright notices. This project
+does not replace or relicense them under the Unlicense. Their installed files and
+notices are preserved in the disk image.
+
+OpenBSD's copyright policy: https://www.openbsd.org/policy.html
+The image is independently prepared and is not an official OpenBSD, Xfce, or
+Oracle VirtualBox release.

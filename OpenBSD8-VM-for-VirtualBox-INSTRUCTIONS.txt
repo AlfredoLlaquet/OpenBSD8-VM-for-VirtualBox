@@ -384,4 +384,13 @@ Further reference
 
 
 
+License
+
+This project's original scripts, configuration, workflows, and documentation are
+released under the Unlicense. See LICENSE in the download or repository. OpenBSD,
+Xfce, and the other software inside the disk retain their own licenses and copyright
+notices; see THIRD-PARTY-NOTICES.txt.
+
+
+
 Alfredo Llaquet-Alsina is not only a BSD enthusiast, but also a writer. Please visit www.TheCrumbs.org (https://www.thecrumbs.org/) and take a look at his work, free for everyone.

@@ -54,10 +54,11 @@ cd "$project_dir"
 (cd "$bundle_dir" && sha256sum --check SHA256SUMS)
 
 cp "$instructions_name" "$bundle_dir/$instructions_name"
+cp LICENSE THIRD-PARTY-NOTICES.txt "$bundle_dir/"
 unset DESKTOP_PASSWORD ROOT_PASSWORD desktop_password root_password
 
 printf '\nPackaging the verified VDI and complete installation instructions.\n'
-(cd "$bundle_dir" && zip -q -6 "$work_dir/$disk_name.zip" "$disk_name.vdi" "$instructions_name" SHA256SUMS)
+(cd "$bundle_dir" && zip -q -6 "$work_dir/$disk_name.zip" "$disk_name.vdi" "$instructions_name" LICENSE THIRD-PARTY-NOTICES.txt SHA256SUMS)
 unzip -tq "$work_dir/$disk_name.zip"
 mv "$work_dir/$disk_name.zip" "$output_dir/$disk_name.zip"
 cp "$bundle_dir/$instructions_name" "$output_dir/$instructions_name"

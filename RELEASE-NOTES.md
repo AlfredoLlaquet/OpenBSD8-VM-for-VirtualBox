@@ -14,3 +14,5 @@ The image configuration has been tested with VirtualBox 7.2.22 on FreeBSD 15. Ot
 Before packaging, the published VDI was cold-booted under QEMU with a disposable write layer. Verification covered both account credentials, graphical login, the Xfce desktop, an interactive X terminal, outbound networking, and reboot. Its SHA-256 checksum was checked again after verification. The `.zip.sha256` file checks the download; `SHA256SUMS` inside the archive checks the extracted VDI.
 
 Created and directed by **Alfredo Llaquet-Alsina**. Implemented by **ChatGPT**.
+
+The project's original scripts and documentation use the Unlicense. Software inside the disk retains its respective licenses; the ZIP includes `LICENSE` and `THIRD-PARTY-NOTICES.txt` explaining the scope.

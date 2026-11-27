@@ -102,9 +102,10 @@ jobs:
       - name: Package the verified VDI and complete instructions
         run: |
           cp OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt "$RUNNER_TEMP/delivery/bundle/"
+          cp LICENSE THIRD-PARTY-NOTICES.txt "$RUNNER_TEMP/delivery/bundle/"
           cd "$RUNNER_TEMP/delivery/bundle"
           zip -q -6 ../OpenBSD-8.0-Xfce-amd64.zip \
-            OpenBSD-8.0-Xfce-amd64.vdi OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt IMAGE-INFO.txt SHA256SUMS
+            OpenBSD-8.0-Xfce-amd64.vdi OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt IMAGE-INFO.txt LICENSE THIRD-PARTY-NOTICES.txt SHA256SUMS
           cd ..
           unzip -tq OpenBSD-8.0-Xfce-amd64.zip
           sha256sum OpenBSD-8.0-Xfce-amd64.zip > OpenBSD-8.0-Xfce-amd64.zip.sha256

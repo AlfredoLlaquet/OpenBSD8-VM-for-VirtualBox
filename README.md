@@ -8,7 +8,7 @@ Created and directed by **Alfredo Llaquet-Alsina**. Implemented by **ChatGPT**.
 
 **[Download the virtual disk ZIP](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/latest/download/OpenBSD-8.0-Xfce-amd64.zip)** · [Download the complete instructions](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/latest/download/OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt) · [All releases](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases)
 
-The ZIP contains the installed `.vdi` disk, `OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt`, and `SHA256SUMS`. The instructions include both initial passwords and can be read without an Internet connection.
+The ZIP contains the installed `.vdi` disk, `OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt`, license notices, and `SHA256SUMS`. The instructions include both initial passwords and can be read without an Internet connection.
 
 ## Compatibility
 
@@ -245,6 +245,10 @@ The maintained source is in this repository; the large disk download is attached
 - [OpenBSD FAQ](https://www.openbsd.org/faq/)
 - [Xfce documentation](https://docs.xfce.org/)
 - [VirtualBox 7.2 user guide](https://docs.oracle.com/en/virtualization/virtualbox/7.2/user/)
+
+## License
+
+This project's original scripts, configuration, workflows, and documentation are released under the [Unlicense](LICENSE). OpenBSD, Xfce, and the other software inside the disk retain their own licenses and copyright notices; see [third-party notices](THIRD-PARTY-NOTICES.txt).
 
 <br>
 

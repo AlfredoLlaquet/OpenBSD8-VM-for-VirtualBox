@@ -48,8 +48,22 @@ printf '\nConfigured local services\n'
 cat /etc/rc.conf.local
 printf '\nDesktop account and groups\n'
 id desktop
-printf '\nSSH root-login setting\n'
-/usr/sbin/sshd -T | grep '^permitrootlogin '
+printf '\nSSH server configuration validation\n'
+if /usr/sbin/sshd -t; then
+    printf 'Configuration and host keys passed sshd -t.\n'
+else
+    status=$?
+    printf 'sshd -t failed with status %s.\n' "$status" >&2
+    exit "$status"
+fi
+printf '\nEffective SSH server configuration\n'
+if /usr/sbin/sshd -G; then
+    :
+else
+    status=$?
+    printf 'sshd -G failed with status %s.\n' "$status" >&2
+    exit "$status"
+fi
 printf '\nBoot console\n'
 cat /etc/boot.conf
 printf '\nNetwork configuration\n'
