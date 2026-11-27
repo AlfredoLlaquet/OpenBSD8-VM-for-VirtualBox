@@ -126,7 +126,13 @@ def verify(args, guest, keyboard, evidence):
                   'grep -Eq \'backend[[:space:]]*=[[:space:]]*"xrender"\' "$HOME/.config/picom/picom.conf"; '
                   'find /usr/local/lib -name "*pdf-poppler*" | grep .'))
         keyboard.key("meta_l", "e")
-        until("Checking the PCManFM-Qt keyboard shortcut", lambda: user(processes(["pcmanfm-qt"])), 75)
+        file_window = """DISPLAY=:0 xwininfo -root -tree | grep -iF '"pcmanfm-qt"'"""
+        until("Waiting for the PCManFM-Qt shortcut to open a window", lambda: user(file_window), 75)
+        # PCManFM-Qt can map its window well after the process appears. Close
+        # it through cwm so it cannot take keyboard focus from the next terminal.
+        time.sleep(1)
+        keyboard.key("meta_l", "w")
+        until("Closing the file manager through cwm", lambda: user("! " + file_window), 45)
         keyboard.key("meta_l", "ret")
     else:
         keyboard.key("alt", "f2")
