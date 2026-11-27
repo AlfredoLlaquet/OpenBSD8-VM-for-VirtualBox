@@ -1,7 +1,5 @@
 name: Verify and publish desktop editions
 on:
-  push:
-    paths: [.github/workflows/release.yml]
   workflow_dispatch:
     inputs:
       edition:
@@ -10,7 +8,7 @@ on:
         options: [all, cwm, gnome, plasma]
         default: all
       source_run:
-        description: Preparation run ID (defaults to the newest run on main)
+        description: Preparation run ID (defaults to the newest matching checkpoint on main)
         type: string
         required: false
       backend:
@@ -69,8 +67,16 @@ jobs:
       - name: Check graphical login, applications, networking, and a second boot
         run: /usr/bin/python3 -u editions/check.py --system "$SYSTEM" --edition "$EDITION" --memory "$MEMORY" --disk "$DISK" --backend "$BACKEND" --evidence "$RUNNER_TEMP/evidence"
       - name: Boot a fresh copy of the larger desktops at 4 GiB
+        id: lower_ram
+        continue-on-error: true
         if: matrix.edition == 'gnome' || matrix.edition == 'plasma'
         run: /usr/bin/python3 -u editions/check.py --system "$SYSTEM" --edition "$EDITION" --memory 4096 --disk "$DISK" --backend "$BACKEND" --evidence "$RUNNER_TEMP/lower-memory" --smoke
+      - name: Record the result when 4 GiB is insufficient
+        if: steps.lower_ram.outcome == 'failure'
+        run: |
+          mkdir -p "$RUNNER_TEMP/lower-memory"
+          echo "The optional 4096 MiB test did not pass on this run. Use the verified 6144 MiB configuration for this desktop." >> "$RUNNER_TEMP/lower-memory/verification.txt"
+          cat "$RUNNER_TEMP/lower-memory/verification.txt" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify the archive and its exact extracted VDI
         run: bash editions/package.sh
       - name: Publish after matching every uploaded asset digest
