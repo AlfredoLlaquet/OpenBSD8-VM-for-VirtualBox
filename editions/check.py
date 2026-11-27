@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 import time
 
+from PIL import Image, ImageFilter
+
 import emulator
 import vbox
 from remote import Guest, available_port, checked, wait_for
@@ -61,8 +63,24 @@ def verify(args, guest, keyboard, evidence):
         return until("Waiting for graphical login", lambda: guest.root(PATH + code, 30), 260)
 
     def snap(name):
-        keyboard.screenshot(evidence / "screen.ppm", evidence / f"{name}.png")
-        (evidence / "screen.ppm").unlink(missing_ok=True)
+        # GDM replaces the greeter X server during login. VirtualBox can report
+        # a disabled framebuffer, or return a black frame, during this transition.
+        target = evidence / f"{name}.png"
+        deadline = time.monotonic() + 95
+        while time.monotonic() < deadline:
+            try:
+                keyboard.screenshot(evidence / "screen.ppm", target)
+                with Image.open(target) as frame:
+                    preview = frame.convert("L").resize((240, 160))
+                edges = preview.filter(ImageFilter.FIND_EDGES).crop((2, 2, 238, 158))
+                if sum(edges.histogram()[20:]) >= 60:
+                    (evidence / "screen.ppm").unlink(missing_ok=True)
+                    return
+            except (OSError, subprocess.CalledProcessError):
+                pass
+            keyboard.key("shift")
+            time.sleep(3)
+        raise RuntimeError(f"No painted {name} screen on the virtual monitor within 95 seconds")
 
     start = until("Cold boot and SSH authentication", lambda: user("sysctl -n kern.boottime"), 850)
     if must("id -un") != "desktop" or checked(guest.root("id -u", 45), "root login") != "0":
@@ -168,7 +186,12 @@ def main():
             try:
                 verify(args, guest, keyboard, evidence)
             except Exception:
-                keyboard.screenshot(work / "failure.ppm", evidence / "failure.png")
+                try:
+                    keyboard.key("shift")
+                    time.sleep(1)
+                    keyboard.screenshot(work / "failure.ppm", evidence / "failure.png")
+                except Exception as err:
+                    print("Virtual monitor at failure:", str(err), flush=True)
                 try:
                     diag = guest.root(PATH + 'ps axww; for f in /var/log/xdm.log /var/log/xenodm.log /var/log/gdm.log /var/log/gdm/*log /var/log/Xorg.0.log /home/desktop/.xsession-errors /home/desktop/.cache/gdm/session.log /var/log/messages; do [ ! -f "$f" ] || { echo "$f"; tail -55 "$f"; }; done', 65)
                     (evidence / "guest-diagnostics.txt").write_text(diag.stdout)
