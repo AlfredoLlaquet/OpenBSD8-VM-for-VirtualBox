@@ -170,7 +170,8 @@ def main():
             except Exception:
                 keyboard.screenshot(work / "failure.ppm", evidence / "failure.png")
                 try:
-                    diag = guest.root(PATH + 'ps axww | tail -110; for f in /var/log/{xdm,xenodm,gdm}.log /var/log/Xorg.0.log; do [ ! -f "$f" ] || tail -30 "$f"; done', 45)
+                    diag = guest.root(PATH + 'ps axww; for f in /var/log/xdm.log /var/log/xenodm.log /var/log/gdm.log /var/log/gdm/*log /var/log/Xorg.0.log /home/desktop/.xsession-errors /home/desktop/.cache/gdm/session.log /var/log/messages; do [ ! -f "$f" ] || { echo "$f"; tail -55 "$f"; }; done', 65)
+                    (evidence / "guest-diagnostics.txt").write_text(diag.stdout)
                     print(diag.stdout[-12000:], flush=True)
                 except Exception as err:
                     print("Guest diagnostics:", type(err).__name__, flush=True)

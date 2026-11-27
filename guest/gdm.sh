@@ -1,15 +1,13 @@
 #!/bin/sh
 set -eu
-# Both BSD packages read the local dconf profile below. Make authentication use
-# an explicit name field for predictable first login on a freshly copied disk.
+# OpenBSD builds GDM with the _gdm account and a matching dconf profile.
+# Put the local database above the packaged greeter defaults in that profile.
 etc=/etc
-[ "$(uname -s)" != FreeBSD ] || etc=/usr/local/etc
+profile=_gdm
+if [ "$(uname -s)" = FreeBSD ]; then etc=/usr/local/etc; profile=gdm; fi
 mkdir -p "$etc/dconf/profile" "$etc/dconf/db/gdm.d" /home/desktop/.config
-if [ ! -f "$etc/dconf/profile/gdm" ]; then
-    printf '%s\n' user-db:user system-db:gdm file-db:/usr/local/share/gdm/greeter-dconf-defaults > "$etc/dconf/profile/gdm"
-elif ! grep -qx 'system-db:gdm' "$etc/dconf/profile/gdm"; then
-    printf '%s\n' system-db:gdm >> "$etc/dconf/profile/gdm"
-fi
+printf '%s\n' user-db:user system-db:gdm file-db:/usr/local/share/gdm/greeter-dconf-defaults > "$etc/dconf/profile/$profile"
 printf '[org/gnome/login-screen]\ndisable-user-list=true\n' > "$etc/dconf/db/gdm.d/00-login"
-dconf update
+dconf update "$etc/dconf/db"
+[ "$(DCONF_PROFILE="$profile" dconf read /org/gnome/login-screen/disable-user-list)" = true ]
 printf 'yes\n' > /home/desktop/.config/gnome-initial-setup-done
