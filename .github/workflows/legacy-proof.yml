@@ -1,0 +1,36 @@
+name: Check the published Xfce disk in VirtualBox 7.2.22
+on:
+  push:
+    paths: [.github/workflows/legacy-proof.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - run: bash editions/host.sh
+      - run: bash editions/vbox-host.sh
+      - name: Download the original release and check both SHA-256 hashes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/xfce" "$RUNNER_TEMP/evidence"
+          cd "$RUNNER_TEMP/xfce"
+          gh release download openbsd-8.0-xfce-public-45953251746-1 -R "$GITHUB_REPOSITORY" -p '*.zip*'
+          sha256sum -c *.zip.sha256
+          unzip -q '*.zip'
+          sha256sum -c SHA256SUMS
+      - name: Sign in graphically, open an xterm, and reboot in VirtualBox
+        run: /usr/bin/python3 -u editions/legacy-proof.py "$RUNNER_TEMP"/xfce/*.vdi "$RUNNER_TEMP/evidence"
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xfce-virtualbox-evidence
+          path: ${{ runner.temp }}/evidence/
+          retention-days: 7
