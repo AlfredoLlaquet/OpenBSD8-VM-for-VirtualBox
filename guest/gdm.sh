@@ -15,5 +15,9 @@ printf 'yes\n' > /home/desktop/.config/gnome-initial-setup-done
 # available in Activities whenever the desktop account chooses to launch it.
 version=$(gnome-shell --version | awk '{print $NF}')
 case "$version" in [0-9]*) ;; *) exit 1 ;; esac
-su -l desktop -c "/usr/local/bin/dbus-run-session -- /usr/local/bin/gsettings set org.gnome.shell welcome-dialog-last-shown-version '$version'"
-su -l desktop -c '/usr/local/bin/gsettings get org.gnome.shell welcome-dialog-last-shown-version' | grep -Fx "'$version'"
+schemas=/usr/local/share/glib-2.0/schemas
+printf "[org.gnome.shell]\nwelcome-dialog-last-shown-version='%s'\n" "$version" > "$schemas/95-mvm-gnome.gschema.override"
+glib-compile-schemas "$schemas"
+installed=$(GSETTINGS_BACKEND=memory gsettings get org.gnome.shell welcome-dialog-last-shown-version)
+printf 'Configured GNOME tour default %s for Shell %s.\n' "$installed" "$version"
+[ "$installed" = "'$version'" ]
