@@ -8,13 +8,13 @@ Created and directed by **Alfredo Llaquet-Alsina**. Implemented by **ChatGPT**.
 
 ## Choose your desktop
 
-2 of the four editions are available. The remaining disks are being built and tested.
+3 of the four editions are available. The remaining disks are being built and tested.
 
 | Edition | What you get | Recommended RAM | Download |
 | --- | --- | ---: | --- |
 | Xfce | A familiar panel, applications menu, and Thunar file manager. | 3 GiB | [ZIP · 1.49 GB](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-xfce-public-45953251746-1/OpenBSD-8.0-Xfce-amd64.zip) |
 | GNOME | An Activities overview, searchable apps, and the Files browser. | 6 GiB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
-| KDE Plasma | A customizable panel, Dolphin file manager, and Konsole terminal. | 6 GiB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
+| KDE Plasma | A customizable panel, Dolphin file manager, and Konsole terminal. | 6 GiB | [2 parts · 2.45 GB](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-plasma-46052053042-1) |
 | cwm | A charcoal desktop with keyboard shortcuts, a slim panel, and a live system monitor. | 3 GiB | [1 part · 1.30 GB](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-cwm-46047375931-1) |
 
 ## Set up VirtualBox
@@ -57,11 +57,20 @@ The original Xfce disk was tested in VirtualBox 7.2.22 on FreeBSD 15 and Ubuntu 
 
 ### GNOME
 
-Press **Super** (the Windows or Command key sent to the guest) for the Activities overview. Start typing an application name to find it. **Files** opens your home folder. The system menu at the top right contains the power controls.
+Press **Super** (the Windows or Command key sent to the guest) for the Activities overview. Start typing an application name to find it. **Files** opens your home folder. Search for **Tour** for a guided introduction. The system menu at the top right contains the power controls.
 
 ### KDE Plasma
 
 Use the application launcher on the panel or press **Alt+Space** to search. **Dolphin** manages files, **Konsole** opens a terminal, and **System Settings** controls the desktop’s appearance.
+
+Plasma Workspace `6.7.5`. The extracted VDI initially occupies **10.6 GB** on the host and can grow to **48 GiB**. [Release files and verification report.](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-plasma-46052053042-1)
+
+<details>
+<summary>View the KDE Plasma desktop</summary>
+
+![OpenBSD with KDE Plasma running in VirtualBox](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-plasma-46052053042-1/desktop.png)
+
+</details>
 
 ### cwm
 
@@ -135,13 +144,21 @@ The session script loads X resources, starts the daemons, paints the wallpaper, 
 
 ### Build, verification, and checksums
 
-The package stage boots the official system with QEMU, installs packages, and saves a powered-off QCOW2 checkpoint per edition. The release stage configures that edition, exports a standalone, dynamically allocated VDI, and compares its guest-visible sectors with the source. VirtualBox boots a disposable byte-for-byte copy of the exported VDI. The build checks the original file’s SHA-256 again after the graphical tests and after extraction from the archive. Each new edition’s release includes an inventory, screenshots, a verification report, and the archive checksums. The report identifies the hypervisor and RAM actually exercised.
+The package stage boots the official system with QEMU, installs packages, and saves a powered-off QCOW2 checkpoint per edition. The release stage configures that edition, exports a standalone, dynamically allocated VDI, and compares its guest-visible sectors with the source. VirtualBox boots a disposable byte-for-byte copy of the exported VDI. The build checks the original file’s SHA-256 again after the graphical tests and after extraction from the archive. The following files accompany the numbered archives.
+
+| Release file | What to inspect |
+| --- | --- |
+| `IMAGE-INFO.txt` | Source commit, package preparation run, verification run, virtual capacity, extracted file size, and the VDI’s SHA-256. |
+| `PACKAGES.txt` | Installed packages, including their exact versions and port revisions. |
+| `verification.txt` | Guest identity, graphical login, interactive xterm and its pseudo-terminal, DHCP address, default route, and two distinct boot times. The cwm report also records the file-manager and lock/unlock tests. |
+| `4096-MiB.txt` | The separate 4 GiB login test for GNOME or Plasma. The full interactive test uses the recommended memory. |
+| `before-login.png`, `desktop.png`, `terminal.png` | The greeter, the logged-in desktop, and the interactive terminal captured from the virtual monitor. |
 
 For a numbered archive, download its checksum file and all volumes to one directory. On Linux use `sha256sum -c SHA256SUMS-downloads.txt`. On FreeBSD and OpenBSD use `sha256 filename`, on macOS use `shasum -a 256 filename`, and in Windows PowerShell use `Get-FileHash .\filename -Algorithm SHA256`. Compare the 64 hexadecimal digits. The extracted `SHA256SUMS` contains the hash of the VDI. Check it **before the first boot**, which writes to the disk.
 
 The original Xfce ZIP has its own [ZIP checksum](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-xfce-public-45953251746-1/OpenBSD-8.0-Xfce-amd64.zip.sha256) and an internal VDI checksum. Its archived installation guide remains specific to that image. The manual **Build OpenBSD Xfce** and **Update existing OpenBSD disk** workflows preserve its original build and refresh paths.
 
-To rebuild, use **Actions → Prepare desktop packages**, choose an edition, then use the edition release workflow with that preparation run’s ID. Desktop packages and base updates can change between builds. GitHub release assets hold the large downloads. Normal README edits do not initiate a VM build.
+To rebuild, use **Actions → Prepare desktop packages**, choose an edition, then use the edition release workflow with that preparation run’s ID. The temporary package checkpoint expires after two days. Leaving the run ID blank selects the newest available checkpoint for that edition on `main`. Package updates can change a later build. The published VM downloads live under **Releases**. Editing the README does not start a build.
 
 Further reading: [OpenBSD documentation](https://www.openbsd.org/faq/), [VirtualBox 7.2 User Guide](https://docs.oracle.com/en/virtualization/virtualbox/7.2/user/).
 
