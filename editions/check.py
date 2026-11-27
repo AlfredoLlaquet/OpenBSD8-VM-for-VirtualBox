@@ -8,21 +8,41 @@ import subprocess
 import tempfile
 import time
 
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageOps
 
 import emulator
 import vbox
 from remote import Guest, available_port, checked, wait_for
 
 PATH = "export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/X11R6/bin:/usr/local/bin:/usr/local/sbin; "
-XLOGIN = r"""
+XSERVER = r"""
 export DISPLAY=:0
 auth=$(ps axww -o command= | awk '/[X]org |[\/]X :0/ {for(i=1;i<NF;i++) if($i=="-auth") print $(i+1)}')
 for cookie in $auth /etc/X11/xenodm/authdir/authfiles/* /var/run/xenodm/authdir/authfiles/* /var/lib/xdm/authdir/authfiles/* /var/db/xdm/authdir/authfiles/*; do
     [ -f "$cookie" ] || continue
-    XAUTHORITY="$cookie" xwininfo -root -tree 2>/dev/null | grep -i '"xlogin"' && exit 0
+    export XAUTHORITY="$cookie"
+    xwininfo -root >/dev/null 2>&1 || continue
+    break
 done
-exit 1
+"""
+XLOGIN = XSERVER + """xwininfo -root -tree | grep -i '"xlogin"'"""
+# This entry lives exclusively in the disposable verification copy. Capture the
+# actual session environment when GNOME or Plasma signals XDG autostart readiness.
+SESSION_PROBE = r"""#!/bin/sh
+set -eu
+umask 077
+qa="$HOME/.mvm-display-test"
+printf '%s\n' "$DISPLAY" > "$qa/display"
+printf '%s\n' "${XAUTHORITY:-$HOME/.Xauthority}" > "$qa/authority"
+touch "$qa/ready"
+while [ ! -f "$qa/terminal" ]; do sleep 1; done
+exec xterm -geometry 80x24+30+45 -title 'Desktop terminal test'
+"""
+SESSION_ENTRY = """[Desktop Entry]
+Type=Application
+Name=VirtualBox desktop verification
+Exec=/bin/sh /home/desktop/.mvm-display-test/session
+Terminal=false
 """
 GDM = r"""
 for account in _gdm gdm; do
@@ -79,8 +99,20 @@ def verify(args, guest, keyboard, evidence):
                         # field only after it has started the PAM conversation.
                         ocr = subprocess.run(["tesseract", str(target), "stdout", "--psm", "11"],
                                              capture_output=True, text=True, timeout=10)
-                        words = ocr.stdout.lower().split()
-                        if "desktop" not in words and "password" not in words:
+                        words = ocr.stdout.lower()
+                        if "desktop" not in words and "asswor" not in words:
+                            # Read the placeholder itself. On OpenBSD GDM the
+                            # account name can legitimately be empty above it.
+                            with Image.open(target) as source:
+                                w, h = source.size
+                                field = source.crop((int(w*.374), int(h*.60), int(w*.525), int(h*.637))).convert("L")
+                            field = ImageOps.invert(ImageOps.autocontrast(field))
+                            crop = evidence / "login-field.png"
+                            field.resize((field.width*4, field.height*4)).save(crop)
+                            words = subprocess.run(["tesseract", str(crop), "stdout", "--psm", "7"],
+                                                   capture_output=True, text=True, timeout=10).stdout.lower()
+                            crop.unlink(missing_ok=True)
+                        if "desktop" not in words and "asswor" not in words:
                             time.sleep(2)
                             continue
                     (evidence / "screen.ppm").unlink(missing_ok=True)
@@ -104,6 +136,12 @@ def verify(args, guest, keyboard, evidence):
     inventory = "pkg_info -q" if args.system == "OpenBSD" else "pkg query '%n-%v'"
     (evidence / "PACKAGES.txt").write_text(must(inventory + " | sort") + "\n")
     save(must("df -h; sysctl hw.physmem"))
+    monitor_session = args.edition in ("gnome", "plasma")
+    if monitor_session:
+        qa = '"$HOME/.mvm-display-test"'
+        must(f'umask 077; mkdir -p {qa} "$HOME/.config/autostart" && '
+             f'printf %s {shlex.quote(SESSION_PROBE)} > {qa}/session && '
+             f'printf %s {shlex.quote(SESSION_ENTRY)} > "$HOME/.config/autostart/mvm-verification.desktop"')
     greeter()
     snap("before-login")
     names = PROCESSES[args.edition].copy()
@@ -126,6 +164,15 @@ def verify(args, guest, keyboard, evidence):
     except RuntimeError:
         print(must('tail -60 "$HOME/.xsession-errors" 2>/dev/null || true'), flush=True)
         raise
+    if monitor_session:
+        until("Waiting for the desktop autostart phase", lambda: user(f'test -f {qa}/ready'), 200)
+        if args.edition == "plasma":
+            # The workspace process predates both the visible panel and the end of KSplash.
+            panel = r'for win in $(xprop -root _NET_CLIENT_LIST | grep -oE "0x[[:xdigit:]]+"); do xprop -id "$win" _NET_WM_WINDOW_TYPE | grep -q _NET_WM_WINDOW_TYPE_DOCK && exit 0; done; exit 1'
+            xenv = f'export DISPLAY="$(cat {qa}/display)" XAUTHORITY="$(cat {qa}/authority)"; '
+            until("Waiting for the Plasma panel to appear", lambda: user(xenv + panel), 150)
+        else:
+            keyboard.key("esc")
     time.sleep(4)
     snap("desktop")
     if args.smoke:
@@ -138,20 +185,17 @@ def verify(args, guest, keyboard, evidence):
                   'grep -Eq \'backend[[:space:]]*=[[:space:]]*"xrender"\' "$HOME/.config/picom/picom.conf"; '
                   'find /usr/local/lib -name "*pdf-poppler*" | grep .'))
         keyboard.key("meta_l", "e")
-        file_window = """DISPLAY=:0 xwininfo -root -tree | grep -iF '"pcmanfm-qt"'"""
-        until("Waiting for the PCManFM-Qt shortcut to open a window", lambda: user(file_window), 75)
-        # PCManFM-Qt can map its window well after the process appears. Close
-        # it through cwm so it cannot take keyboard focus from the next terminal.
+        file_window = """xwininfo -root -tree | grep -iF '"pcmanfm-qt"'"""
+        until("Waiting for the PCManFM-Qt shortcut to open a window",
+              lambda: guest.root(PATH + XSERVER + file_window, 25), 75)
         time.sleep(1)
         keyboard.key("meta_l", "w")
-        until("Closing the file manager through cwm", lambda: user("! " + file_window), 45)
+        until("Closing the file manager through cwm",
+              lambda: guest.root(PATH + XSERVER + "! " + file_window, 25), 45)
         keyboard.key("meta_l", "ret")
+    elif monitor_session:
+        must(f'touch {qa}/terminal')
     else:
-        if args.edition == "gnome":
-            # A new GNOME session opens in Activities. Leave its search field
-            # before opening Run Command so typing will go to the new terminal.
-            keyboard.key("esc")
-            time.sleep(1)
         keyboard.key("alt", "f2")
         time.sleep(2)
         keyboard.type_text("xterm")
@@ -161,20 +205,23 @@ def verify(args, guest, keyboard, evidence):
     marker = "/tmp/mvm-proof-" + secrets.token_hex(5)
     probe = f"grep -Fx desktop {marker} >/dev/null && grep '^/dev/' {marker}"
     command = f"tty > {marker} && id -un >> {marker}"
-    if args.edition == "gnome":
-        keyboard.key("esc")
-        keyboard.key("alt", "tab")
-        time.sleep(1)
-        keyboard.key("ret")
     keyboard.type_text(command)
     keyboard.key("ret")
     time.sleep(2)
     if user(probe).returncode:
-        # The session switcher also works when a launcher has retained focus.
-        keyboard.key("esc")
-        keyboard.key("alt", "tab")
+        if monitor_session:
+            # Explicitly activate the terminal if an overview retained focus.
+            focus = Path(__file__).with_name("focus.c").read_text()
+            xenv = f'export DISPLAY="$(cat {qa}/display)" XAUTHORITY="$(cat {qa}/authority)"; '
+            must(f'printf %s {shlex.quote(focus)} > {qa}/focus.c && '
+                 f'cc -I/usr/X11R6/include -I/usr/local/include -L/usr/X11R6/lib -L/usr/local/lib '
+                 f'-o {qa}/focus {qa}/focus.c -lX11')
+            keyboard.key("esc")
+            must(xenv + f'win=$(xwininfo -root -tree | awk \'/"Desktop terminal test"/ {{print $1; exit}}\'); {qa}/focus "$win"')
+        else:
+            keyboard.key("esc")
+            keyboard.key("alt", "tab")
         time.sleep(1)
-        keyboard.key("ret")
         keyboard.type_text(command)
         keyboard.key("ret")
     save("Interactive xterm: " + until("Checking the interactive GUI terminal", lambda: user(probe), 45))

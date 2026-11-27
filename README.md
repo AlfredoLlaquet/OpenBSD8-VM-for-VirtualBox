@@ -8,14 +8,14 @@ Created and directed by **Alfredo Llaquet-Alsina**. Implemented by **ChatGPT**.
 
 ## Choose your desktop
 
-The original Xfce disk is downloadable. The GNOME, Plasma, and cwm disks are being built and tested.
+2 of the four editions are available. The remaining disks are being built and tested.
 
-| Edition | What you get | Starting memory | Download |
+| Edition | What you get | Recommended RAM | Download |
 | --- | --- | ---: | --- |
-| Xfce | A familiar panel, applications menu, and Thunar file manager. | 3 GiB | [Download ZIP](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-xfce-public-45953251746-1/OpenBSD-8.0-Xfce-amd64.zip) |
+| Xfce | A familiar panel, applications menu, and Thunar file manager. | 3 GiB | [ZIP · 1.49 GB](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-xfce-public-45953251746-1/OpenBSD-8.0-Xfce-amd64.zip) |
 | GNOME | An Activities overview, searchable apps, and the Files browser. | 6 GiB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
 | KDE Plasma | A customizable panel, Dolphin file manager, and Konsole terminal. | 6 GiB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
-| cwm | A charcoal desktop with keyboard shortcuts, a slim panel, and a live system monitor. | 3 GiB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
+| cwm | A charcoal desktop with keyboard shortcuts, a slim panel, and a live system monitor. | 3 GiB | [1 part · 1.30 GB](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-cwm-46047375931-1) |
 
 ## Set up VirtualBox
 
@@ -78,6 +78,15 @@ Press **Super+P**, type a program name, and press **Enter**. The bottom panel sh
 | Super+1 through Super+4 | Show a workspace |
 | Super+Shift+1 through Super+Shift+4 | Move the active window to a workspace |
 | Super+Shift+Q | Log out to the greeter |
+
+The window manager is part of the OpenBSD 8.0 base system. The extracted VDI initially occupies **6.4 GB** on the host and can grow to **48 GiB**. [Release files and verification report.](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-cwm-46047375931-1)
+
+<details>
+<summary>View the cwm desktop</summary>
+
+![OpenBSD with cwm running in VirtualBox](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-cwm-46047375931-1/desktop.png)
+
+</details>
 
 ### Shut down or troubleshoot
 

@@ -20,14 +20,17 @@ InitialSetupEnable=false' "$config"
     usermod -G wheel,_shutdown desktop
     printf '%s\n' 'kern.maxfiles=65535' >> /etc/sysctl.conf
     rcctl enable messagebus xenodm
+    # Keep the greeter background, then hand Plasma a clean desktop.
+    sed -i '/^[^#].*\/xconsole[[:space:]]/s/^/# /' /etc/X11/xenodm/Xsetup_0
     cat > /home/desktop/.xsession <<'SESSION'
 #!/bin/sh
 XDG_RUNTIME_DIR=$(mktemp -d "/tmp/plasma-$(id -u).XXXXXXXX") || exit 1
-export XDG_RUNTIME_DIR LIBGL_ALWAYS_SOFTWARE=1
+export XDG_RUNTIME_DIR LIBGL_ALWAYS_SOFTWARE=1 LANG=en_US.UTF-8
 trap 'rm -rf "$XDG_RUNTIME_DIR"' EXIT
 /usr/local/bin/ck-launch-session /usr/local/bin/dbus-run-session -- /usr/local/bin/startplasma-x11
 SESSION
     mkdir -p /home/desktop/.config
+    printf '[KSplash]\nEngine=none\nTheme=None\n' > /home/desktop/.config/ksplashrc
     printf '[Compositing]\nEnabled=false\n' > /home/desktop/.config/kwinrc
     ;;
   cwm)
