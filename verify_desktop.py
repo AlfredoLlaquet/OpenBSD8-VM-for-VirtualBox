@@ -115,7 +115,7 @@ def log(message):
 
 def redact(message):
     # Replace complete credentials before clipping output at a diagnostic size limit.
-    for name in ("ROOT_PASSWORD", "DESKTOP_PASSWORD"):
+    for name in ("ROOT_PASSWORD", "DESKTOP_PASSWORD", "OLD_ROOT_PASSWORD", "OLD_DESKTOP_PASSWORD"):
         if value := os.environ.get(name):
             message = message.replace(value, "[redacted]")
     return message
@@ -196,7 +196,8 @@ class Guest:
         ask.write_text('#!/bin/sh\nprintf "%s\\n" "$OBSD_VERIFY_PASSWORD"\n')
         ask.chmod(0o700)
         self.environment = os.environ.copy()
-        for variable in ("ROOT_PASSWORD", "DESKTOP_PASSWORD", "SSH_AUTH_SOCK"):
+        for variable in ("ROOT_PASSWORD", "DESKTOP_PASSWORD", "OLD_ROOT_PASSWORD",
+                         "OLD_DESKTOP_PASSWORD", "SSH_AUTH_SOCK"):
             self.environment.pop(variable, None)
         self.environment.update(SSH_ASKPASS=str(ask), SSH_ASKPASS_REQUIRE="force",
                                 DISPLAY="verify", OBSD_VERIFY_PASSWORD=desktop_password)
@@ -263,6 +264,13 @@ def verify(guest, monitor, temporary, evidence, password, deadline):
     report = []
     start = wait_for("Booting the installed disk and checking SSH", lambda:
                      guest.run("sysctl -n kern.boottime"), phase(600))
+    user = checked(guest.run("id -un"), "Authenticating the desktop password")
+    if user != "desktop":
+        raise RuntimeError("The desktop login did not authenticate as desktop")
+    root = checked(guest.root("id -u", timeout=45), "Authenticating the root password")
+    if root != "0":
+        raise RuntimeError("The root password did not produce a root shell")
+    report.append("Both published passwords authenticated: desktop through SSH; root through su.")
     log("Checking for the xenodm login window")
     try:
         report.append(checked(guest.root(GREETER, timeout=200), "Checking xenodm"))

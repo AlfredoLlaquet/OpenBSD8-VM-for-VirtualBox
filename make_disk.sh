@@ -15,23 +15,33 @@ checkpoint_dir=$(cd "$checkpoint_dir" && pwd)
 checkpoint_disk="$checkpoint_dir/packages.qcow2"
 
 disk_name=OpenBSD-8.0-Xfce-amd64
+instructions_name=OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt
 bundle_dir="$work_dir/bundle"
 mkdir -p "$bundle_dir" "$output_dir/evidence"
+# These are intentional public first-login credentials, documented in the README.
+# build_guest.py still creates a newly salted bcrypt hash for each account.
+desktop_password=OpenSesame
+root_password=CheckOut_TheCrumbs.org
 if [[ -s "$checkpoint_disk" ]]; then
-  IFS= read -r desktop_password < "$checkpoint_dir/desktop-password"
-  IFS= read -r root_password < "$checkpoint_dir/root-password"
-  if [[ ! $desktop_password =~ ^[0-9a-f]{24}$ || ! $root_password =~ ^[0-9a-f]{24}$ ]]; then
-    printf 'The checkpoint login files are incomplete.\n' >&2
+  if [[ ! -r "$checkpoint_dir/desktop-password" || ! -r "$checkpoint_dir/root-password" ]] ||
+     ! IFS= read -r checkpoint_desktop_password < "$checkpoint_dir/desktop-password" ||
+     ! IFS= read -r checkpoint_root_password < "$checkpoint_dir/root-password"; then
+    printf 'The checkpoint login files are missing or incomplete.\n' >&2
     exit 1
   fi
+  if [[ $checkpoint_desktop_password != "$desktop_password" ||
+        $checkpoint_root_password != "$root_password" ]]; then
+    printf 'This checkpoint uses older login credentials. Use a new checkpoint directory for a public build.\n' >&2
+    exit 1
+  fi
+  unset checkpoint_desktop_password checkpoint_root_password
 else
-  desktop_password=$(openssl rand -hex 12)
-  root_password=$(openssl rand -hex 12)
   printf '%s\n' "$desktop_password" > "$checkpoint_dir/desktop-password"
   printf '%s\n' "$root_password" > "$checkpoint_dir/root-password"
 fi
-if [[ ${GITHUB_ACTIONS:-} == true ]]; then
-  printf '::add-mask::%s\n' "$desktop_password" "$root_password"
+if [[ ! -s "$project_dir/$instructions_name" ]]; then
+  printf 'The public installation instructions are missing: %s\n' "$instructions_name" >&2
+  exit 1
 fi
 export DESKTOP_PASSWORD="$desktop_password" ROOT_PASSWORD="$root_password"
 
@@ -43,17 +53,13 @@ cd "$project_dir"
 /usr/bin/python3 -u verify_desktop.py --disk "$bundle_dir/$disk_name.vdi" --evidence "$output_dir/evidence"
 (cd "$bundle_dir" && sha256sum --check SHA256SUMS)
 
-cp VirtualBox.txt "$bundle_dir/VirtualBox.txt"
-{
-  printf 'OpenBSD graphical login\n\nUsername: desktop\nPassword: %s\n' "$desktop_password"
-  printf '\nFor system administration, use su - with this root password: %s\n' "$root_password"
-  printf '\nYou can change each account password with passwd while signed in as that account.\n'
-} > "$bundle_dir/FIRST-LOGIN.txt"
+cp "$instructions_name" "$bundle_dir/$instructions_name"
 unset DESKTOP_PASSWORD ROOT_PASSWORD desktop_password root_password
 
-printf '\nPackaging the verified VDI and first-login instructions.\n'
-(cd "$bundle_dir" && zip -q -6 "$work_dir/$disk_name.zip" "$disk_name.vdi" VirtualBox.txt FIRST-LOGIN.txt SHA256SUMS)
+printf '\nPackaging the verified VDI and complete installation instructions.\n'
+(cd "$bundle_dir" && zip -q -6 "$work_dir/$disk_name.zip" "$disk_name.vdi" "$instructions_name" SHA256SUMS)
 unzip -tq "$work_dir/$disk_name.zip"
 mv "$work_dir/$disk_name.zip" "$output_dir/$disk_name.zip"
+cp "$bundle_dir/$instructions_name" "$output_dir/$instructions_name"
 (cd "$output_dir" && sha256sum "$disk_name.zip" > "$disk_name.zip.sha256")
 du -h "$output_dir/$disk_name.zip"

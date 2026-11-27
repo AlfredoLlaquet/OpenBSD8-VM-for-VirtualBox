@@ -7,15 +7,10 @@ on:
         description: Optional ID of a previous run containing this image's package checkpoint
         type: string
         required: false
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/build.yml
-      - build_guest.py
-      - guest/**
-      - verify_desktop.py
-      - make_disk.sh
-      - VirtualBox.txt
+
+concurrency:
+  group: openbsd-image-release
+  cancel-in-progress: false
 
 jobs:
   image:
@@ -68,7 +63,7 @@ jobs:
         run: bash make_disk.sh "$RUNNER_TEMP/delivery" "$RUNNER_TEMP/obsd-checkpoint"
 
       - name: Check for a reusable installed system after a failed build
-        if: ${{ failure() && steps.build.outcome == 'failure' && github.event.repository.private == true }}
+        if: ${{ failure() && steps.build.outcome == 'failure' }}
         id: checkpoint
         run: |
           if [[ -s "$RUNNER_TEMP/obsd-checkpoint/packages.qcow2" ]]; then
@@ -77,7 +72,7 @@ jobs:
             echo 'ready=true' >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Keep the private package checkpoint for a retry
+      - name: Keep the package checkpoint with public initial credentials for a retry
         if: ${{ failure() && steps.checkpoint.outputs.ready == 'true' }}
         uses: actions/upload-artifact@v7
         with:
@@ -87,8 +82,7 @@ jobs:
           retention-days: 1
           compression-level: 3
 
-      - name: Publish the verified disk in this private repository
-        if: github.event.repository.private == true
+      - name: Publish the verified disk and installation instructions
         id: release
         continue-on-error: true
         env:
@@ -97,16 +91,20 @@ jobs:
         run: |
           tag="openbsd-8.0-xfce-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           cd "$RUNNER_TEMP/delivery"
-          gh release create "$tag" OpenBSD-8.0-Xfce-amd64.zip OpenBSD-8.0-Xfce-amd64.zip.sha256 \
+          gh release create "$tag" --draft OpenBSD-8.0-Xfce-amd64.zip OpenBSD-8.0-Xfce-amd64.zip.sha256 \
+            OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt \
             --target "$GITHUB_SHA" --title 'OpenBSD 8.0 with Xfce for VirtualBox (amd64)' \
-            --notes 'Extract the ZIP. It contains the installed VDI, the VirtualBox settings, the initial login credentials, and a SHA-256 checksum. The disk was booted and the Xfce desktop was tested with QEMU.'
+            --notes-file "$GITHUB_WORKSPACE/RELEASE-NOTES.md"
+          gh release edit "$tag" --draft=false --latest
 
       - name: Deliver the disk as a workflow download if release publication failed
-        if: github.event.repository.private == true && steps.release.outcome == 'failure'
+        if: steps.release.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
           name: OpenBSD-8.0-Xfce-amd64
-          path: ${{ runner.temp }}/delivery/OpenBSD-8.0-Xfce-amd64.zip*
+          path: |
+            ${{ runner.temp }}/delivery/OpenBSD-8.0-Xfce-amd64.zip*
+            ${{ runner.temp }}/delivery/OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt
           if-no-files-found: error
           retention-days: 7
           compression-level: 0

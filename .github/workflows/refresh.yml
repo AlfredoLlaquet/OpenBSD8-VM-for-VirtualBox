@@ -1,0 +1,138 @@
+name: Update existing OpenBSD disk
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: Release whose installed VDI should be updated without reinstalling OpenBSD
+        type: string
+        required: true
+        default: openbsd-8.0-xfce-45744114013-1
+
+concurrency:
+  group: openbsd-image-release
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Prepare the emulator and disk space
+        run: |
+          for toolchain in /usr/local/lib/android/sdk /usr/share/dotnet /usr/local/.ghcup; do
+            available_kib=$(df -Pk "$RUNNER_TEMP" | awk 'END {print $4}')
+            if (( available_kib >= 24 * 1024 * 1024 )); then break; fi
+            if [[ -d $toolchain ]]; then
+              sudo rm -rf -- "$toolchain"
+            fi
+          done
+          sudo apt-get -qq update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils seabios openssh-client python3-pexpect python3-bcrypt python3-pil zip unzip
+          if [[ -c /dev/kvm && ! -w /dev/kvm ]]; then
+            sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          fi
+          qemu-system-x86_64 --version
+          df -h "$RUNNER_TEMP"
+
+      - name: Download and verify the existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
+        run: |
+          [[ $SOURCE_TAG =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]
+          mkdir -p "$RUNNER_TEMP/source" "$RUNNER_TEMP/delivery/bundle" "$RUNNER_TEMP/delivery/evidence"
+          gh release download "$SOURCE_TAG" --pattern OpenBSD-8.0-Xfce-amd64.zip \
+            --pattern OpenBSD-8.0-Xfce-amd64.zip.sha256 --dir "$RUNNER_TEMP/source"
+          cd "$RUNNER_TEMP/source"
+          sha256sum --check OpenBSD-8.0-Xfce-amd64.zip.sha256
+          if [[ $SOURCE_TAG == openbsd-8.0-xfce-45744114013-1 ]]; then
+            printf '%s  %s\n' cd167fa9a918dd5b3ac4e2b8d98061e157c6c8e4779dad49f693c60fbbb557b2 OpenBSD-8.0-Xfce-amd64.zip | sha256sum --check
+          fi
+          /usr/bin/python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('OpenBSD-8.0-Xfce-amd64.zip') as archive:
+              names = archive.namelist()
+              required = ['OpenBSD-8.0-Xfce-amd64.vdi', 'SHA256SUMS']
+              for name in required:
+                  if names.count(name) != 1:
+                      raise SystemExit(f'Expected exactly one {name} in the source archive')
+              optional = ['FIRST-LOGIN.txt'] if 'FIRST-LOGIN.txt' in names else []
+              for name in required + optional:
+                  archive.extract(name, '.')
+          PY
+          sha256sum --check SHA256SUMS
+
+      - name: Change passwords inside the existing disk and record its installed software
+        env:
+          DESKTOP_PASSWORD: OpenSesame
+          ROOT_PASSWORD: CheckOut_TheCrumbs.org
+        run: |
+          login_args=()
+          if [[ -f "$RUNNER_TEMP/source/FIRST-LOGIN.txt" ]]; then
+            login_args=(--credentials "$RUNNER_TEMP/source/FIRST-LOGIN.txt")
+          fi
+          /usr/bin/python3 -u update_existing_disk.py \
+            --disk "$RUNNER_TEMP/source/OpenBSD-8.0-Xfce-amd64.vdi" \
+            "${login_args[@]}" \
+            --output "$RUNNER_TEMP/delivery/bundle/OpenBSD-8.0-Xfce-amd64.vdi" \
+            --inventory "$RUNNER_TEMP/delivery/bundle/IMAGE-INFO.txt" \
+            --evidence "$RUNNER_TEMP/delivery/evidence"
+          cd "$RUNNER_TEMP/delivery/bundle"
+          sha256sum OpenBSD-8.0-Xfce-amd64.vdi > SHA256SUMS
+
+      - name: Cold-boot the updated VDI and verify both logins and the desktop
+        env:
+          DESKTOP_PASSWORD: OpenSesame
+          ROOT_PASSWORD: CheckOut_TheCrumbs.org
+        run: |
+          /usr/bin/python3 -u verify_desktop.py \
+            --disk "$RUNNER_TEMP/delivery/bundle/OpenBSD-8.0-Xfce-amd64.vdi" \
+            --evidence "$RUNNER_TEMP/delivery/evidence"
+          cd "$RUNNER_TEMP/delivery/bundle"
+          sha256sum --check SHA256SUMS
+
+      - name: Package the verified VDI and complete instructions
+        run: |
+          cp OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt "$RUNNER_TEMP/delivery/bundle/"
+          cd "$RUNNER_TEMP/delivery/bundle"
+          zip -q -6 ../OpenBSD-8.0-Xfce-amd64.zip \
+            OpenBSD-8.0-Xfce-amd64.vdi OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt IMAGE-INFO.txt SHA256SUMS
+          cd ..
+          unzip -tq OpenBSD-8.0-Xfce-amd64.zip
+          sha256sum OpenBSD-8.0-Xfce-amd64.zip > OpenBSD-8.0-Xfce-amd64.zip.sha256
+          cp bundle/OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt bundle/IMAGE-INFO.txt .
+          du -h OpenBSD-8.0-Xfce-amd64.zip
+
+      - name: Publish the verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
+        run: |
+          tag="openbsd-8.0-xfce-public-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cp RELEASE-NOTES.md "$RUNNER_TEMP/release-notes.md"
+          printf '\nThis release updates the installed disk from `%s`, preserving its OpenBSD and package installation.\n' "$SOURCE_TAG" >> "$RUNNER_TEMP/release-notes.md"
+          cd "$RUNNER_TEMP/delivery"
+          gh release create "$tag" --draft \
+            OpenBSD-8.0-Xfce-amd64.zip OpenBSD-8.0-Xfce-amd64.zip.sha256 \
+            OpenBSD8-VM-for-VirtualBox-INSTRUCTIONS.txt IMAGE-INFO.txt \
+            --target "$GITHUB_SHA" --title 'OpenBSD 8 with Xfce for VirtualBox' \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release edit "$tag" --draft=false --latest
+
+      - name: Retain verification evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-verification-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/delivery/evidence/
+          if-no-files-found: ignore
+          retention-days: 7
