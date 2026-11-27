@@ -18,7 +18,9 @@ The image is expected to work with other VirtualBox 7.x releases on Intel/AMD x8
 
 The guest architecture is **amd64**, also called **x86-64** or **x64**. This includes compatible 64-bit Intel processors as well as AMD processors. It does **not** include ARM processors: VirtualBox on Apple silicon Macs or Windows ARM computers cannot run this x86-64 image. See Oracle's [host architecture limitations](https://docs.oracle.com/en/virtualization/virtualbox/7.2/user/installation.html).
 
-Your computer needs a working VirtualBox installation with hardware virtualization available, enough memory to give the VM 3 GB while keeping the host usable, and room for the extracted disk. The virtual disk has a capacity of **16 GiB**; allow additional space for the ZIP and any snapshots you create. VirtualBox itself is not included in the download.
+VirtualBox must be installed on your computer, with hardware virtualization enabled. The recommended memory allocation for the virtual machine is **3 GB of RAM**. VirtualBox itself is not included in the download.
+
+The extracted VDI file initially occupies approximately **4.4 GB of disk space** on your computer. Its file size grows as data is written inside the virtual machine. The virtual disk has a total capacity of **16 GiB (about 17.2 GB)**.
 
 ## Installation Instructions
 
