@@ -16,7 +16,7 @@ bind-key 4-e "pcmanfm-qt"
 bind-key 4-m "xterm -e mc"
 bind-key 4-b "firefox"
 bind-key 4-t "xterm -e tmux new-session -A -s main"
-bind-key 4-l "xlock -mode blank"
+bind-key 4-l "xlock +usefirst -mode blank"
 bind-key 4-F1 "mvm-keys"
 bind-key Print "mvm-screenshot"
 bind-key 4-f window-fullscreen

@@ -8,7 +8,7 @@ Super + E            Open PCManFM-Qt
 Super + M            Open Midnight Commander in xterm
 Super + B            Open Firefox
 Super + T            Start or reattach the main tmux session
-Super + L            Lock the screen with xlock
+Super + L            Lock the screen. Press Space, then enter your password.
 Print Screen         Save the whole display in Pictures/Screenshots
 Alt + Tab            Cycle windows (hold Shift to reverse)
 Super + F            Toggle full screen

@@ -16,7 +16,7 @@ class Keyboard:
         self.name = name
 
     def key(self, *names):
-        codes = {"ret": "1c", "esc": "01", "tab": "0f", "spc": "39", "shift": "2a",
+        codes = {"ret": "1c", "esc": "01", "backspace": "0e", "tab": "0f", "spc": "39", "shift": "2a",
                  "alt": "38", "meta_l": "e0 5b", "f1": "3b", "f2": "3c", "p": "19", "l": "26",
                  "f": "21", "w": "11", "e": "12", "b": "30", "m": "32"}
         down = [codes[name].split() for name in names]

@@ -144,8 +144,10 @@ def verify(args, guest, keyboard, evidence):
     if args.edition == "cwm":
         keyboard.key("meta_l", "l")
         until("Checking xlock", lambda: user(processes(["xlock"])), 40)
+        time.sleep(2)
         keyboard.key("spc")
-        time.sleep(1.5)
+        snap("unlock-prompt")
+        keyboard.key("backspace")
         keyboard.type_text("OpenSesame")
         keyboard.key("ret")
         until("Unlock with the desktop password", lambda: user('! pgrep -x -u "$(id -u)" xlock >/dev/null'), 45)

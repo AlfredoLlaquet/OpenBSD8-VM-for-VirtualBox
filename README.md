@@ -12,17 +12,17 @@ The original Xfce disk is downloadable. The GNOME, Plasma, and cwm disks are bei
 
 | Edition | What you get | Starting memory | Download |
 | --- | --- | ---: | --- |
-| Xfce | A familiar panel, applications menu, and Thunar file manager. | 3 GB | [Download ZIP](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-xfce-public-45953251746-1/OpenBSD-8.0-Xfce-amd64.zip) |
-| GNOME | An Activities overview, searchable apps, and the Files browser. | 6 GB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
-| KDE Plasma | A customizable panel, Dolphin file manager, and Konsole terminal. | 6 GB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
-| cwm | A charcoal desktop with keyboard shortcuts, a slim panel, and a live system monitor. | 3 GB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
+| Xfce | A familiar panel, applications menu, and Thunar file manager. | 3 GiB | [Download ZIP](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-xfce-public-45953251746-1/OpenBSD-8.0-Xfce-amd64.zip) |
+| GNOME | An Activities overview, searchable apps, and the Files browser. | 6 GiB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
+| KDE Plasma | A customizable panel, Dolphin file manager, and Konsole terminal. | 6 GiB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
+| cwm | A charcoal desktop with keyboard shortcuts, a slim panel, and a live system monitor. | 3 GiB | [Build progress](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions) |
 
 ## Set up VirtualBox
 
 You need VirtualBox on a 64-bit Intel or AMD computer. These are x86-64 guests. VirtualBox on an Apple silicon Mac or an ARM-based Windows computer requires a different guest architecture. **Host** means your normal computer. **Guest** means the OpenBSD desktop inside the VM window.
 
 1. **Download one edition.** On its release page, expand **Assets**. For a ZIP, extract it normally. For a numbered 7-Zip archive, download every file ending in `.7z.001`, `.002`, and so on into one folder. Open the first part with 7-Zip or an archive manager that supports split 7z files, and extract once. GitHub’s **Source code** links contain the build scripts. The extracted **`.vdi`** is the installed disk. Keep it in a permanent folder.
-2. **Create the machine.** In VirtualBox Manager, click **New**, give the VM a name such as **OpenBSD Plasma**, and select **BSD → OpenBSD (64-bit)**. Leave **ISO Image** empty. Set **2 processors** and the memory shown above. Leave **EFI/UEFI** unchecked. Choose **Use an existing virtual hard disk file** if offered. Otherwise, finish the wizard and attach the disk in the next step.
+2. **Create the machine.** In VirtualBox Manager, click **New**, give the VM a name such as **OpenBSD Plasma**, and select **BSD → OpenBSD (64-bit)**. Leave **ISO Image** empty. Set **2 processors** and the memory shown above. In VirtualBox, 3 GiB is **3072 MB** and 6 GiB is **6144 MB**. Leave **EFI/UEFI** unchecked. Choose **Use an existing virtual hard disk file** if offered. Otherwise, finish the wizard and attach the disk in the next step.
 3. **Attach the disk.** With the machine powered off, open **Settings → Storage**. Switch to **Expert** view if necessary. Find **Controller: AHCI** or add an **AHCI (SATA)** controller. If the wizard placed the extracted VDI under **Controller: IDE**, drag its entry onto **Controller: AHCI**. To attach it manually, select the AHCI controller, click **Add Hard Disk**, then **Add** to locate the VDI and **Choose**. Remove the attachment of any blank disk the wizard created. The downloaded VDI should be the only hard disk, on **AHCI port 0**. The empty IDE optical drive can stay where it is.
 4. **Set the remaining hardware.** Use the settings in the table below. Click **OK**, select the VM, and click **Start**.
 5. **Sign in as `desktop`.** Enter the password from the next section and press **Enter**. Password fields can stay blank while you type. The initial keyboard layout is US English.
@@ -65,7 +65,7 @@ Use the application launcher on the panel or press **Alt+Space** to search. **Do
 
 ### cwm
 
-Press **Super+P**, type a program name, and press **Enter**. The bottom panel shows open windows, the notification area, and the clock. Conky displays CPU, memory, and disk usage. The active window has a thin muted-gold border. **Super+F1** opens the shortcut guide inside the VM.
+Press **Super+P**, type a program name, and press **Enter**. The bottom panel shows open windows, the notification area, and the clock. Conky displays CPU, memory, and disk usage. The active window has a thin muted-gold border. **Super+F1** opens the shortcut guide inside the VM. To unlock, press **Space**, type the desktop password, and press **Enter**.
 
 | Shortcut | Action |
 | --- | --- |
@@ -105,7 +105,7 @@ The build authenticates the complete `install80.iso` against `SHA256.sig` using 
 | Plasma | xenodm, the KDE login class, ConsoleKit, a per-user runtime directory, and `startplasma-x11`. Software rendering accommodates the virtual graphics adapter. |
 | cwm | Base-system xenodm and cwm, a per-session D-Bus, and the dotfiles in [guest/cwm](guest/cwm). |
 
-The 8.0 release package collection provides GNOME Shell 49 and Plasma 6.7. The exact installed versions belong to each disk’s package inventory. OpenBSD supplies cwm, xenodm, xterm, xlock, and tmux with the system. Firefox, Geany, the Qt file manager, and the remaining cwm applications come from packages.
+The [OpenBSD 8.0 release](https://www.openbsd.org/80.html) and [amd64 package collection](https://cdn.openbsd.org/pub/OpenBSD/8.0/packages/amd64/) provide the build inputs. The 8.0 package collection provides GNOME Shell 49 and Plasma 6.7. The exact installed versions belong to each disk’s package inventory. OpenBSD supplies cwm, xenodm, xterm, xlock, and tmux with the system. Firefox, Geany, the Qt file manager, and the remaining cwm applications come from packages.
 
 ### Network, maintenance, and integration
 

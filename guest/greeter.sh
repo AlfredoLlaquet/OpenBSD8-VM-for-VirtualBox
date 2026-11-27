@@ -12,9 +12,8 @@ xlogin*failColor: #db9287
 xlogin*borderWidth: 1
 xlogin*frameWidth: 1
 RES
-# Some vendor setups exit explicitly, so set the backdrop before their exit.
+# The dedicated cwm greeter needs only a background. The vendor Xsetup also
+# opens a console window which would otherwise follow the user into cwm.
 xsetroot=$(command -v xsetroot)
-awk -v cmd="$xsetroot -solid '#252927'" '/^exit([[:space:]]|$)/ && !done {print cmd;done=1} {print} END {if(!done)print cmd}' \
-    "$dir/Xsetup_0" > /tmp/mvm-xsetup
-cat /tmp/mvm-xsetup > "$dir/Xsetup_0"
-rm /tmp/mvm-xsetup
+printf '%s\n' '#!/bin/sh' "exec $xsetroot -solid '#252927'" > "$dir/Xsetup_0"
+chmod 755 "$dir/Xsetup_0"
