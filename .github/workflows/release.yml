@@ -1,0 +1,91 @@
+name: Verify and publish desktop editions
+on:
+  push:
+    paths: [.github/workflows/release.yml]
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: Edition to release
+        type: choice
+        options: [all, cwm, gnome, plasma]
+        default: all
+      source_run:
+        description: Preparation run ID (defaults to the newest run on main)
+        type: string
+        required: false
+      backend:
+        description: Hypervisor used for the published verification report
+        type: choice
+        options: [virtualbox, qemu]
+        default: virtualbox
+permissions:
+  actions: read
+  contents: write
+jobs:
+  release:
+    name: Release ${{ matrix.edition }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 310
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: ${{ fromJSON((inputs.edition == '' || inputs.edition == 'all') && '["cwm","gnome","plasma"]' || format('["{0}"]', inputs.edition)) }}
+    env:
+      SYSTEM: OpenBSD
+      VERSION: '8.0'
+      EDITION: ${{ matrix.edition }}
+      SOURCE_RUN: ${{ inputs.source_run }}
+      BACKEND: ${{ inputs.backend || 'virtualbox' }}
+      DESKTOP_PASSWORD: OpenSesame
+      ROOT_PASSWORD: CheckOut_TheCrumbs.org
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - run: bash editions/host.sh
+      - name: Read the verified package checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash editions/get-checkpoint.sh
+      - name: Configure the guest and compare the exported VDI sector for sector
+        run: |
+          case "$EDITION" in
+            xfce) label=Xfce; memory=3072 ;;
+            cwm) label=cwm; memory=3072 ;;
+            gnome) label=GNOME; memory=6144 ;;
+            plasma) label=Plasma; memory=6144 ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/bundle" "$RUNNER_TEMP/evidence"
+          disk="$RUNNER_TEMP/bundle/$SYSTEM-$VERSION-$label-amd64.vdi"
+          echo "LABEL=$label" >> "$GITHUB_ENV"
+          echo "MEMORY=$memory" >> "$GITHUB_ENV"
+          echo "DISK=$disk" >> "$GITHUB_ENV"
+          /usr/bin/python3 -u build_guest.py --edition "$EDITION" --output-format vdi --output "$disk" --checkpoint "$RUNNER_TEMP/checkpoint/packages.qcow2" --work-dir "$RUNNER_TEMP/provision-log" --disk-size 48G --memory 6144
+          cd "$RUNNER_TEMP/bundle"
+          sha256sum "$(basename "$disk")" > SHA256SUMS
+      - name: Install Oracle VirtualBox 7.2.22
+        if: env.BACKEND == 'virtualbox'
+        run: bash editions/vbox-host.sh
+      - name: Check graphical login, applications, networking, and a second boot
+        run: /usr/bin/python3 -u editions/check.py --system "$SYSTEM" --edition "$EDITION" --memory "$MEMORY" --disk "$DISK" --backend "$BACKEND" --evidence "$RUNNER_TEMP/evidence"
+      - name: Check the larger desktops at 4 GiB
+        if: matrix.edition == 'gnome' || matrix.edition == 'plasma'
+        run: /usr/bin/python3 -u editions/check.py --system "$SYSTEM" --edition "$EDITION" --memory 4096 --disk "$DISK" --backend "$BACKEND" --evidence "$RUNNER_TEMP/lower-memory" --smoke
+      - name: Verify the archive and its exact extracted VDI
+        run: bash editions/package.sh
+      - name: Publish after matching every uploaded asset digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash editions/publish.sh
+      - name: Keep diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: evidence-${{ matrix.edition }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/evidence/
+            ${{ runner.temp }}/lower-memory/
+            ${{ runner.temp }}/provision-log/*.log
+            ${{ runner.temp }}/bundle/provision-log/*.log
+          retention-days: 3
+          if-no-files-found: ignore
