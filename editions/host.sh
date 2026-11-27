@@ -6,8 +6,14 @@ if [[ ${RUNNER_ENVIRONMENT:-} == github-hosted ]]; then
     sudo rm -rf -- "$toolchain"
   done
 fi
-sudo apt-get -qq update
-sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils seabios openssh-client signify-openbsd python3-pexpect python3-bcrypt python3-pil genisoimage p7zip-full
+apt_sources=(-o Acquire::Retries=3)
+if [[ -f /etc/apt/sources.list.d/ubuntu.sources ]]; then
+  # The image only needs Ubuntu packages. Unrelated hosted-runner feeds can
+  # be unavailable even while the signed Ubuntu archives are healthy.
+  apt_sources+=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
+fi
+sudo apt-get "${apt_sources[@]}" -qq update
+sudo apt-get "${apt_sources[@]}" install -y --no-install-recommends qemu-system-x86 qemu-utils seabios openssh-client signify-openbsd python3-pexpect python3-bcrypt python3-pil genisoimage p7zip-full tesseract-ocr tesseract-ocr-eng
 if [[ -c /dev/kvm && ! -w /dev/kvm ]]; then
   sudo setfacl -m "u:$(id -un):rw" /dev/kvm
 fi

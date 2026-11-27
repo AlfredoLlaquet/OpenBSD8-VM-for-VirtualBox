@@ -62,7 +62,7 @@ def verify(args, guest, keyboard, evidence):
         code = GDM if args.edition == "gnome" else XLOGIN
         return until("Waiting for graphical login", lambda: guest.root(PATH + code, 30), 260)
 
-    def snap(name):
+    def snap(name, *, password_prompt=False):
         # GDM replaces the greeter X server during login. VirtualBox can report
         # a disabled framebuffer, or return a black frame, during this transition.
         target = evidence / f"{name}.png"
@@ -74,6 +74,15 @@ def verify(args, guest, keyboard, evidence):
                     preview = frame.convert("L").resize((240, 160))
                 edges = preview.filter(ImageFilter.FIND_EDGES).crop((2, 2, 238, 158))
                 if sum(edges.histogram()[20:]) >= 60:
+                    if password_prompt:
+                        # GDM paints the account's full name above the password
+                        # field only after it has started the PAM conversation.
+                        ocr = subprocess.run(["tesseract", str(target), "stdout", "--psm", "11"],
+                                             capture_output=True, text=True, timeout=10)
+                        words = ocr.stdout.lower().split()
+                        if "desktop" not in words and "password" not in words:
+                            time.sleep(2)
+                            continue
                     (evidence / "screen.ppm").unlink(missing_ok=True)
                     return
             except (OSError, subprocess.CalledProcessError):
@@ -106,7 +115,10 @@ def verify(args, guest, keyboard, evidence):
         time.sleep(8)
     keyboard.type_text("desktop")
     keyboard.key("ret")
-    time.sleep(4 if args.edition == "gnome" else 1.5)
+    if args.edition == "gnome":
+        snap("password-prompt", password_prompt=True)
+    else:
+        time.sleep(1.5)
     keyboard.type_text("OpenSesame")
     keyboard.key("ret")
     try:
@@ -135,6 +147,11 @@ def verify(args, guest, keyboard, evidence):
         until("Closing the file manager through cwm", lambda: user("! " + file_window), 45)
         keyboard.key("meta_l", "ret")
     else:
+        if args.edition == "gnome":
+            # A new GNOME session opens in Activities. Leave its search field
+            # before opening Run Command so typing will go to the new terminal.
+            keyboard.key("esc")
+            time.sleep(1)
         keyboard.key("alt", "f2")
         time.sleep(2)
         keyboard.type_text("xterm")
@@ -142,10 +159,25 @@ def verify(args, guest, keyboard, evidence):
     until("Checking the terminal launched from the graphical desktop", lambda: user(processes(["xterm"])), 95)
     time.sleep(2)
     marker = "/tmp/mvm-proof-" + secrets.token_hex(5)
-    keyboard.type_text(f"tty > {marker} && id -un >> {marker}")
+    probe = f"grep -Fx desktop {marker} >/dev/null && grep '^/dev/' {marker}"
+    command = f"tty > {marker} && id -un >> {marker}"
+    if args.edition == "gnome":
+        keyboard.key("esc")
+        keyboard.key("alt", "tab")
+        time.sleep(1)
+        keyboard.key("ret")
+    keyboard.type_text(command)
     keyboard.key("ret")
-    save("Interactive xterm: " + until("Checking the interactive GUI terminal", lambda:
-         user(f"grep -Fx desktop {marker} >/dev/null && grep '^/dev/' {marker}"), 75))
+    time.sleep(2)
+    if user(probe).returncode:
+        # The session switcher also works when a launcher has retained focus.
+        keyboard.key("esc")
+        keyboard.key("alt", "tab")
+        time.sleep(1)
+        keyboard.key("ret")
+        keyboard.type_text(command)
+        keyboard.key("ret")
+    save("Interactive xterm: " + until("Checking the interactive GUI terminal", lambda: user(probe), 45))
     snap("terminal")
     if args.edition == "cwm":
         keyboard.key("meta_l", "l")
