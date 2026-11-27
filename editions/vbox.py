@@ -1,4 +1,4 @@
-"""Launch the extracted VDI with Oracle VirtualBox and a disposable write layer."""
+"""Launch the extracted VDI with Oracle VirtualBox and a disposable byte-for-byte copy."""
 import contextlib
 import os
 from pathlib import Path
@@ -34,6 +34,10 @@ class Keyboard:
 
 @contextlib.contextmanager
 def machine(disk, system, memory, temp, port, evidence):
+    # Register only an independent copy. VirtualBox can update the VDI header
+    # of even an immutable parent when it first registers a qemu-img export.
+    copy = temp / "desktop-test.vdi"
+    subprocess.run(["cp", "--reflink=auto", "--sparse=always", "--", str(disk), str(copy)], check=True)
     name = "MVM-" + system
     os.environ["VBOX_USER_HOME"] = str(temp / "VirtualBox")
     vbox("createvm", "--name", name, "--ostype", system + "_64", "--register",
@@ -46,7 +50,7 @@ def machine(disk, system, memory, temp, port, evidence):
              "--boot1", "disk", "--boot2", "none", "--boot3", "none", "--boot4", "none")
         vbox("storagectl", name, "--name", "AHCI", "--add", "sata", "--controller", "IntelAhci", "--portcount", "1")
         vbox("storageattach", name, "--storagectl", "AHCI", "--port", "0", "--device", "0",
-             "--type", "hdd", "--medium", disk, "--mtype", "immutable")
+             "--type", "hdd", "--medium", copy)
         vbox("startvm", name, "--type", "headless")
         yield Keyboard(name)
     except subprocess.CalledProcessError as error:

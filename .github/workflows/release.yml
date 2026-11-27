@@ -68,7 +68,7 @@ jobs:
         run: bash editions/vbox-host.sh
       - name: Check graphical login, applications, networking, and a second boot
         run: /usr/bin/python3 -u editions/check.py --system "$SYSTEM" --edition "$EDITION" --memory "$MEMORY" --disk "$DISK" --backend "$BACKEND" --evidence "$RUNNER_TEMP/evidence"
-      - name: Check the larger desktops at 4 GiB
+      - name: Boot a fresh copy of the larger desktops at 4 GiB
         if: matrix.edition == 'gnome' || matrix.edition == 'plasma'
         run: /usr/bin/python3 -u editions/check.py --system "$SYSTEM" --edition "$EDITION" --memory 4096 --disk "$DISK" --backend "$BACKEND" --evidence "$RUNNER_TEMP/lower-memory" --smoke
       - name: Verify the archive and its exact extracted VDI
