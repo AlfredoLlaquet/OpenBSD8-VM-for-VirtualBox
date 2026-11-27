@@ -63,12 +63,19 @@ Make these changes while the VM is fully powered off.
 | Network → Adapter 1 → Advanced → Adapter Type | **Intel PRO/1000 MT Desktop (82540EM)** |
 | Network → Adapter 1 → Cable Connected | On |
 
-For storage, open **Settings → Storage**:
+For storage, select **Storage** in the same settings window:
 
-1. Find the **SATA** controller. If none exists, use the controller-add button and choose **Add SATA Controller**. Its controller type should be **AHCI**.
-2. If the wizard created a blank hard disk, select that disk beneath the controller and choose **Remove Attachment**. Leave the extracted OpenBSD disk in place if it is already attached.
-3. If the OpenBSD disk is not attached, select the SATA controller, click its **Add Hard Disk** button, and choose an existing disk. In the disk selector, use **Add** to locate `OpenBSD-8.0-Xfce-amd64.vdi`, then select it and click **Choose**.
-4. Confirm that the OpenBSD disk is the only attached hard disk and is on **SATA Port 0**. Leave the virtual optical drive empty.
+1. Find the **AHCI (SATA) controller**, shown as **Controller: AHCI**. If it is missing, use the controller-add button to add an **AHCI (SATA)** controller.
+
+2. Find `OpenBSD-8.0-Xfce-amd64.vdi` in the storage list. If VirtualBox attached it automatically to **Controller: IDE**, **drag the disk’s entry onto Controller: AHCI**. If it is already beneath AHCI, leave it there.
+
+3. If the OpenBSD disk is not attached, select the AHCI controller, click **Add Hard Disk**, and choose an existing disk. In the disk selector, select the OpenBSD VDI. If it is not listed, click **Add** to locate it, then select it and click **Choose**.
+
+4. If the wizard also created a blank hard disk, select that blank disk and choose **Remove Attachment**. The OpenBSD VDI should be the only attached hard disk.
+
+5. Select the OpenBSD VDI and confirm that it is attached to **port 0 of the AHCI controller**.
+
+**The IDE controller and its empty virtual CD/DVD drive can remain as they are.** Neither needs to be moved or removed. The optical drive should show **Empty**; no ISO or installation disc is needed.
 
 The **USB Tablet** setting lets the pointer move between the host and the OpenBSD guest without the usual mouse capture. No physical tablet is needed. If VirtualBox asks you to enable a USB controller, enable it under **Settings → USB**; the basic **USB 1.1 (OHCI)** controller is sufficient for this pointing device.
 
