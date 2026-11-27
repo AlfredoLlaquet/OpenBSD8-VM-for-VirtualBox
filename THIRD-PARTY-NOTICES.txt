@@ -1,13 +1,8 @@
-License scope
+The project’s original scripts, workflows, desktop configuration, and guides
+are released under the Unlicense. The installed operating system, drivers,
+fonts, desktop environments, and other applications retain their individual
+licenses and copyright notices. Their installed notices are preserved.
 
-The Unlicense in LICENSE covers this project's original build and verification
-scripts, configuration, workflows, and documentation.
-
-The virtual disk contains OpenBSD, Xfce, and other third-party software. Those
-components retain their respective licenses and copyright notices. This project
-does not replace or relicense them under the Unlicense. Their installed files and
-notices are preserved in the disk image.
-
-OpenBSD's copyright policy: https://www.openbsd.org/policy.html
-The image is independently prepared and is not an official OpenBSD, Xfce, or
-Oracle VirtualBox release.
+This is an independent project directed by Alfredo Llaquet-Alsina. It is not
+an official OpenBSD, GNOME, KDE, Xfce, or Oracle VirtualBox release.
+OpenBSD licensing: https://www.openbsd.org/policy.html

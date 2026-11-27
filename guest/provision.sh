@@ -4,28 +4,36 @@ set -eux
 PATH=/bin:/usr/bin:/sbin:/usr/sbin:/usr/X11R6/bin:/usr/local/bin:/usr/local/sbin
 export PATH
 
-if ! launcher=$(command -v startxfce4); then
-    echo "The installed packages did not provide the Xfce session launcher." >&2
-    pkg_info -aI | grep -i xfce >&2 || :
-    exit 1
-fi
-id desktop
-primary_group=$(id -gn desktop)
-case " $(id -Gn desktop) " in
-    *" wheel "*) ;;
-    *) usermod -G wheel desktop ;;
-esac
+if [ "${MVM_EDITION:-xfce}" = xfce ]; then
+    if ! launcher=$(command -v startxfce4); then
+        echo "The installed packages did not provide the Xfce session launcher." >&2
+        pkg_info -aI | grep -i xfce >&2 || :
+        exit 1
+    fi
+    id desktop
+    primary_group=$(id -gn desktop)
+    case " $(id -Gn desktop) " in
+        *" wheel "*) ;;
+        *) usermod -G wheel desktop ;;
+    esac
 
-if command -v ck-launch-session >/dev/null; then
-    printf '#!/bin/sh\nexec "%s" --with-ck-launch\n' "$launcher" > /home/desktop/.xsession
+    if command -v ck-launch-session >/dev/null; then
+        printf '#!/bin/sh\nexec "%s" --with-ck-launch\n' "$launcher" > /home/desktop/.xsession
+    else
+        echo "ConsoleKit is unavailable; configuring the standard Xfce session." >&2
+        printf '#!/bin/sh\nexec "%s"\n' "$launcher" > /home/desktop/.xsession
+    fi
+    chown "desktop:$primary_group" /home/desktop/.xsession
+    chmod 700 /home/desktop/.xsession
+    rcctl enable messagebus
+    rcctl enable xenodm
 else
-    echo "ConsoleKit is unavailable; configuring the standard Xfce session." >&2
-    printf '#!/bin/sh\nexec "%s"\n' "$launcher" > /home/desktop/.xsession
+    mkdir -p /tmp/mvm-edition
+    ftp -V -o /tmp/mvm-edition/desktop.tgz "$MVM_URL/desktop.tgz"
+    tar -xzf /tmp/mvm-edition/desktop.tgz -C /tmp/mvm-edition
+    sh /tmp/mvm-edition/edition-desktop.sh
+    rm -r /tmp/mvm-edition
 fi
-chown "desktop:$primary_group" /home/desktop/.xsession
-chmod 700 /home/desktop/.xsession
-rcctl enable messagebus
-rcctl enable xenodm
 rcctl enable sshd
 if ! /usr/sbin/sshd -T | grep -qx 'permitrootlogin no'; then
     { printf '%s\n' 'PermitRootLogin no'; cat /etc/ssh/sshd_config; } > /etc/ssh/sshd_config.obsd
@@ -104,4 +112,4 @@ if ! relink_completed; then
 fi
 echo "Kernel relink finished; /bsd matches OpenBSD's recorded checksum."
 sync
-echo "Xfce login, networking, and SSH configuration are ready for the graphical boot test."
+echo "Desktop login, networking, and SSH configuration are ready for the graphical boot test."

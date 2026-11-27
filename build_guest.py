@@ -4,6 +4,7 @@
 import argparse
 import contextlib
 import http.server
+import io
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import threading
 import time
@@ -129,9 +131,16 @@ def build_server(root_password, desktop_password, edition="xfce"):
             b"/ 1G-2G 5%\nswap 512M\n/tmp 256M-2G 5%\n/var 768M-4G 10%\n"
             b"/usr 3G-10G 20%\n/usr/local 4G-* 45%\n/home 1G-* 15%\n"
         )
+        if edition != "xfce":
+            guest = Path(__file__).parent / "guest"
+            archive = io.BytesIO()
+            with tarfile.open(fileobj=archive, mode="w:gz") as tar:
+                for name in ("edition-desktop.sh", "gdm.sh", "greeter.sh", "cwm"):
+                    tar.add(guest / name, arcname=name)
+            files[prefix + "/desktop.tgz"] = archive.getvalue()
         for stage in ("packages", "provision"):
             script = (Path(__file__).parent / "guest" / f"{stage}.sh").read_bytes()
-            files[f"{prefix}/{stage}.sh"] = f"export MVM_EDITION={edition}\n".encode() + script
+            files[f"{prefix}/{stage}.sh"] = f"export MVM_EDITION={edition} MVM_URL={base_url}\n".encode() + script
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
         try:
@@ -345,6 +354,7 @@ def package_checkpoint(checkpoint, url, password, options, transcript):
 
 def arguments():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--edition", choices=["xfce", "gnome", "plasma", "cwm"], default="xfce")
     parser.add_argument("--output", type=Path, default=Path("build/openbsd-xfce.qcow2"))
     parser.add_argument("--output-format", choices=["qcow2", "vdi"], default="qcow2")
     parser.add_argument("--work-dir", type=Path, default=Path("build/guest"),
@@ -385,7 +395,7 @@ def build():
     with tempfile.TemporaryDirectory(dir=output.parent, prefix=".obsd-install-") as staging:
         directory = Path(staging)
         source = directory / "guest.qcow2"
-        with (work / "serial.log").open("w") as logfile, build_server(root_password, desktop_password) as url:
+        with (work / "serial.log").open("w") as logfile, build_server(root_password, desktop_password, options.edition) as url:
             transcript = Transcript(logfile, (root_password, desktop_password))
             if checkpoint:
                 package_checkpoint(checkpoint, url, root_password, options, transcript)

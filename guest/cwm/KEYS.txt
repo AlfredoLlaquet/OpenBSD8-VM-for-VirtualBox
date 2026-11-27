@@ -1,0 +1,19 @@
+cwm keyboard guide
+==================
+Super is the Windows or Command key sent to the guest.
+
+Super + Enter        Open xterm
+Super + P            Find and run a program with dmenu
+Super + E            Open PCManFM-Qt
+Super + M            Open Midnight Commander in xterm
+Super + B            Open Firefox
+Super + T            Start or reattach the main tmux session
+Super + L            Lock the screen with xlock
+Print Screen         Save the whole display in Pictures/Screenshots
+Alt + Tab            Cycle windows (hold Shift to reverse)
+Super + F            Toggle full screen
+Super + W            Ask the current window to close
+Super + 1 through 4  Show a workspace
+Super + Shift + 1–4  Send the focused window to a workspace
+Super + Shift + Q    Leave cwm and return to the graphical login
+Super + F1           Open this guide

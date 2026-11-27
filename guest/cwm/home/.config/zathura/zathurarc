@@ -1,0 +1,7 @@
+set default-bg "#242827"
+set default-fg "#d1d8cf"
+set statusbar-bg "#242827"
+set statusbar-fg "#c7b28a"
+set inputbar-bg "#242827"
+set inputbar-fg "#add0ae"
+set font "JetBrains Mono 10"

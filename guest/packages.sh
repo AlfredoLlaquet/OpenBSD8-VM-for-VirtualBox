@@ -44,7 +44,7 @@ printf '%s\n' 'https://cdn.openbsd.org/pub/OpenBSD' > /etc/installurl
 case "${MVM_EDITION:-xfce}" in
     xfce) set -- xfce dbus consolekit2 polkit ;;
     gnome) set -- gnome gdm firefox dbus consolekit2 polkit ;;
-    plasma) set -- kde-plasma kwin-x11 dolphin konsole firefox dbus consolekit2 polkit ;;
+    plasma) set -- kde-plasma kwin-x11 kf6-dolphin konsole firefox dbus consolekit2 polkit ;;
     cwm) set -- dmenu tint2 pcmanfm-qt mc picom conky-- feh dunst scrot parcellite \
         lxappearance vim-- geany firefox zathura zathura-pdf-poppler mpv fastfetch \
         jetbrains-mono qt6ct adwaita-qt6 gnome-themes-extra adwaita-icon-theme dbus ;;

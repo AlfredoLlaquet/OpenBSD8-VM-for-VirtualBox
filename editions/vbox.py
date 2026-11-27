@@ -17,7 +17,7 @@ class Keyboard:
 
     def key(self, *names):
         codes = {"ret": "1c", "esc": "01", "tab": "0f", "spc": "39", "shift": "2a",
-                 "alt": "38", "meta_l": "e0 5b", "f1": "3b", "p": "19", "l": "26",
+                 "alt": "38", "meta_l": "e0 5b", "f1": "3b", "f2": "3c", "p": "19", "l": "26",
                  "f": "21", "w": "11", "e": "12", "b": "30", "m": "32"}
         down = [codes[name].split() for name in names]
         up = [s[:-1] + [f"{int(s[-1], 16) + 128:02x}"] for s in reversed(down)]

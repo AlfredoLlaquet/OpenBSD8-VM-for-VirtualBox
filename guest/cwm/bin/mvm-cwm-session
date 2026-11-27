@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+export PATH=/bin:/usr/bin:/usr/X11R6/bin:/usr/local/bin
+export QT_QPA_PLATFORMTHEME=qt6ct XDG_CURRENT_DESKTOP=cwm XDG_SESSION_TYPE=x11
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then exec dbus-run-session -- "$0"; fi
+xrdb -merge "$HOME/.Xresources"
+gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || :
+feh --no-fehbg --bg-fill /usr/local/share/mvm/wallpaper.ppm
+dunst &
+tint2 &
+picom --config "$XDG_CONFIG_HOME/picom/picom.conf" &
+conky -c "$XDG_CONFIG_HOME/conky/conky.conf" &
+parcellite &
+exec cwm

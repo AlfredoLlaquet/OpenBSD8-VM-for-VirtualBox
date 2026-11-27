@@ -1,0 +1,2 @@
+#!/bin/sh
+exec xterm -T 'cwm keyboard guide' -geometry 72x23 -e sh -c 'cat /usr/local/share/mvm/KEYS.txt; printf "\nPress Enter to close "; read -r answer'

@@ -1,0 +1,15 @@
+[global]
+    origin = top-right
+    offset = (14, 14)
+    width = 320
+    font = JetBrains Mono 10
+    frame_width = 1
+    frame_color = "#b7a174"
+    background = "#272b29"
+    foreground = "#d3dbd0"
+    timeout = 6
+[urgency_low]
+    foreground = "#a8c3ac"
+[urgency_critical]
+    frame_color = "#cf8c7d"
+    timeout = 0

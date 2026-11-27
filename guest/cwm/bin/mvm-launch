@@ -1,0 +1,2 @@
+#!/bin/sh
+exec dmenu_run -i -p Run -fn 'JetBrains Mono:size=10' -nb '#242827' -nf '#c8d2c6' -sb '#b7a174' -sf '#171b19'

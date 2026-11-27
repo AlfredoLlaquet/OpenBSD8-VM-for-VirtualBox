@@ -1,0 +1,16 @@
+XTerm*faceName: JetBrains Mono
+XTerm*faceSize: 11
+XTerm*background: #202423
+XTerm*foreground: #b5d7b5
+XTerm*cursorColor: #d3b579
+XTerm*color0: #202423
+XTerm*color1: #c88279
+XTerm*color2: #91b89a
+XTerm*color3: #c2aa7d
+XTerm*color4: #8da3b1
+XTerm*color5: #b99ab0
+XTerm*color6: #8cb9ad
+XTerm*color7: #d0d6cc
+XTerm*selectToClipboard: true
+XTerm*saveLines: 6000
+XTerm*internalBorder: 8
