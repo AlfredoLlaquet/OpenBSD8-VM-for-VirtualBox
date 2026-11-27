@@ -121,55 +121,93 @@ Use the desktop’s power menu when available. From any edition, run `su -` in a
 
 ## Nerd Section
 
-### Base system and disk layout
+### How the image is prepared and verified
 
-The build authenticates the complete `install80.iso` against `SHA256.sig` using the pinned OpenBSD 8.0 base signify key. It installs every distribution set, including Xenocara, from that ISO. The guest applies signed `syspatch` updates and uses `pkg_add` against the official OpenBSD 8.0/amd64 package repository. The installer uses a whole-disk MBR and an OpenBSD disklabel. The layout separates `/`, `/tmp`, `/var`, `/usr`, `/usr/local`, and `/home`, plus swap. New editions have 48 GiB of virtual capacity. The original Xfce disk has 16 GiB. Inspect a running guest with `disklabel sd0`, `df -h`, `uname -a`, and `pkg_info`.
+When you open xterm in the Plasma edition, the program itself came from OpenBSD’s installation CD. KWin, installed later from the package collection, draws its window border. The letters you type arrive from a keyboard emulated by VirtualBox. Each piece followed a different path onto your screen. The release test brings them together by typing a command into that very window and checking who received it.
 
-| Session | Login and startup |
+#### An unattended installation from signed media
+
+The build starts with the same `install80.iso` an amd64 machine can boot from. Before starting QEMU, the builder obtains OpenBSD’s `SHA256.sig` and uses `signify` with a copy of the **OpenBSD 8.0 base public key** pinned in the build script. The signature authenticates the list of expected hashes. Hashing the downloaded ISO then establishes that this particular file matches the entry OpenBSD signed. The public key is what lets the builder trust the answer even when the ISO and the checksum list came from the same mirror. [Installer source](build_guest.py) · [OpenBSD installation guide](https://www.openbsd.org/faq/faq4.html) · [signify manual](https://man.openbsd.org/signify.1)
+
+On an OpenBSD system with the trusted 8.0 base key installed, the underlying check can be repeated in a directory containing the two downloaded files.
+
+```sh
+signify -C -p /etc/signify/openbsd-80-base.pub -x SHA256.sig install80.iso
+```
+
+On the Ubuntu build host, QEMU presents a virtual amd64 computer to OpenBSD and boots the verified ISO. The build script selects the serial console and gives the installer the address of an answer file served by a temporary HTTP server on the build host. The file tells the installer which disk to use, how to partition it, which accounts to create, and where to find the distribution sets. The answer to that last question is `cd0`. All sets, including the X Window System shipped by OpenBSD as Xenocara, come from the authenticated CD image. That also explains the surprising “Continue without verification” answer in the script. The full install CD omits a separate signed manifest for its embedded sets, and the host has already verified the entire ISO.
+
+Once the installed system boots, two OpenBSD tools take over. `syspatch` applies available signed binary fixes to the base system. `pkg_add` obtains the selected desktop and applications from the OpenBSD 8.0 package collection. An X server, a window manager, and a desktop suite can therefore have different origins even when they appear on the same screen. Xenocara and cwm arrive with the system. GNOME Shell, Plasma Workspace, and Firefox arrive as packages. [Package installation script](guest/packages.sh)
+
+The original **Xfce** download has its own history. Its public ZIP was made by refreshing the accounts and documentation on the existing installed disk. Its fresh-install recipe is still available in the repository. When the other three editions were added, the project downloaded that same ZIP, checked the ZIP and VDI hashes, and booted a copy in VirtualBox 7.2.22. That exercise tested the disk early readers had actually downloaded. [Xfce refresh workflow](.github/workflows/refresh.yml) · [Verification of the published ZIP](.github/workflows/legacy-proof.yml)
+
+#### What must finish before the power goes off
+
+For GNOME, Plasma, and cwm, package installation ends with a powered-off disk in QCOW2, QEMU’s copy-on-write format. The build keeps this **checkpoint** so a change to the login configuration can be tested without downloading the packages again. Configuration writes go into a small copy-on-write disk called an *overlay*. Reads of an unchanged block go to the checkpoint. A write to that block belongs to the overlay. At this stage both files are needed to see the configured system.
+
+One detail matters particularly on OpenBSD. During startup the system relinks its kernel in the background, preparing a newly arranged kernel for the **next** boot. A current boot that looks healthy says little about the file the bootloader will read tomorrow. Before powering down, the provisioning script waits for the relinker, checks its success message, and verifies `/bsd` against `/var/db/kernel.SHA256`. If that check fails, it retries the native relinker once. The script also switches the boot console from the serial port back to `pc0` so the next operator sees OpenBSD in the VM window. [Guest provisioning and kernel checks](guest/provision.sh)
+
+After a clean shutdown, `qemu-img convert` reads the overlay and its backing disk together and writes a standalone Virtual Disk Image (VDI) for VirtualBox. `qemu-img compare` then compares what the guest can read at corresponding disk addresses. The QCOW2 and VDI headers describe different formats, so whole-file hashes of those two files would answer the wrong question. Sector comparison establishes that the conversion preserved the virtual disk’s contents. The project takes a SHA-256 hash of the resulting **VDI** for later byte-for-byte checks. [QEMU disk image tools](https://www.qemu.org/docs/master/tools/qemu-img.html) · [Checking the downloaded VDI](#checking-the-copy-you-downloaded)
+
+#### Making VirtualBox prove that someone can use the desktop
+
+The next machine runs **VirtualBox 7.2.22**. It cold-boots an independent copy of the exported VDI. Even registering a disk can update its VDI header. Using a copy lets the test log in, create files, and reboot while the original retains its release checksum. A temporary SSH connection forwarded through the host’s loopback address lets the verifier inspect the guest. The virtual keyboard delivers the keystrokes, and the virtual monitor shows what a person at the console would see. [VirtualBox configuration](editions/vbox.py) · [Desktop verifier](editions/check.py)
+
+Consider Plasma. The verifier types the public account and password at the graphical greeter. It looks for `kwin_x11`, the window manager, and `plasmashell`, which supplies the workspace. Both must belong to `desktop`. It then asks X11 whether a panel window has appeared. A wallpaper can already be visible while that panel is still missing. Inside the session, the verifier opens an xterm and types `tty` and `id -un` into it, redirecting the output to a temporary file. SSH reads back the result. On the published disk the terminal reported `/dev/ttyp1` and the account was `desktop`. The device name is assigned at runtime. What matters is that keystrokes delivered to a graphical window reached that user’s shell.
+
+The same full test checks the address on `em0`, the default route, and an HTTPS fetch from the OpenBSD mirror. It requests a reboot, waits for `kern.boottime` to change, and finds the graphical greeter again. The cwm edition also has to open and close PCManFM-Qt with cwm shortcuts and lock and unlock the session. The original Xfce verifier has its own path through xenodm, the Xfce processes, a visible interactive xterm, networking, and a second boot. [Original Xfce verifier](verify_desktop.py)
+
+Memory trials explain the settings at the top of this README. At 4 GiB, GNOME reached the greeter but failed to start the user’s shell within the test window. One Plasma trial reached the desktop at 4 GiB, while another displayed the wallpaper without its panel. Both editions completed the full interactive test at 6 GiB. These observations explain the 6 GiB recommendation for these images. They also show how much a test can miss if it stops at the first attractive screen. [GNOME results](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-gnome-46052866705-1) · [Plasma results](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-plasma-46052053042-1)
+
+### Reading the disk from inside OpenBSD
+
+The Plasma download is 2.45 GB across two compressed parts. Extract it and the VDI occupies 10,604,446,208 bytes on the host. Boot it and OpenBSD sees a **48 GiB disk**. All three measurements are right. The download is measured in decimal GB (one billion bytes each). The disk capacity is measured in binary GiB (1,073,741,824 bytes each). The dynamically allocated VDI grows as the guest writes to previously unallocated blocks. The virtual capacity is the address space the controller presents to OpenBSD. The original Xfce disk has 16 GiB of virtual capacity. GNOME and cwm use the same 48 GiB capacity as Plasma.
+
+Inside that disk is a master boot record (MBR) with an OpenBSD partition. An OpenBSD *disklabel* subdivides that space into swap and the filesystems mounted at `/`, `/tmp`, `/var`, `/usr`, `/usr/local`, and `/home`. This becomes practical when an application installer reports that it has run out of space. Most packaged applications live under `/usr/local`. In the Plasma test, that filesystem had 12.4 GiB available, while the root filesystem had 1.7 GiB. Asking `df -h /` whether Firefox will fit is like asking the ground-floor tenant how much room is left in the attic. [OpenBSD disk setup](https://www.openbsd.org/faq/faq14.html)
+
+```sh
+df -h / /usr/local /home
+mount
+```
+
+The first command selects the filesystems containing those paths. The second shows their device names and mount options. In a root shell, `disklabel sd0` shows the partition boundaries, including swap, which never appears in `df`. On a running system, `syspatch -l` lists installed base patches and `pkg_info` lists installed packages. For maintenance, root runs `syspatch` for the base system and `pkg_add -u` for packages, following any reboot instructions from `syspatch`.
+
+### From the login window to the four desktops
+
+The **display manager** presents the greeter, authenticates the user, and launches a session. A **window manager** takes responsibility for the application windows inside that session. A desktop environment can add a panel, a file manager, and services of its own. Knowing which component owns the screen gives you somewhere to look when a login succeeds but the desktop looks incomplete.
+
+| Edition | What happens after authentication |
 | --- | --- |
-| Xfce | xenodm reads `~/.xsession` and starts Xfce with ConsoleKit. The original installation and archive have their own release history. |
-| GNOME | GDM and the packaged GNOME Xorg session. System D-Bus starts before GDM. Avahi and multicast supply service discovery. |
-| Plasma | xenodm, the KDE login class, ConsoleKit, a per-user runtime directory, and `startplasma-x11`. Software rendering accommodates the virtual graphics adapter. |
-| cwm | Base-system xenodm and cwm, a per-session D-Bus, and the dotfiles in [guest/cwm](guest/cwm). |
+| Xfce | OpenBSD’s xenodm reads `~/.xsession`. The installed launcher starts Xfce with ConsoleKit. `xfwm4` manages the windows and `xfce4-panel` draws the panel. The original inventory records `xfce4-session-4.20.4`. |
+| GNOME | GDM starts the packaged GNOME Xorg session. The system message bus starts before GDM. The greeter has its own `_gdm` settings, and the user gets a separate GNOME Shell. This distinction lets the build configure the name prompt at login and the welcome tour on the desktop independently. The inventory records `gnome-shell-49.10p2`. |
+| KDE Plasma | xenodm starts `~/.xsession` under the user’s `kde` login class. The script creates a private runtime directory and starts `startplasma-x11` with ConsoleKit and a per-session D-Bus. The session requests software OpenGL and disables KWin compositing for this virtual display. The inventory records matching Plasma Workspace and KWin X11 packages at `6.7.5`. |
+| cwm | xenodm starts a short shell script that brings up the panel and other X11 clients, then hands control to OpenBSD’s own cwm. The script is small enough to follow from login to logout. |
 
-The [OpenBSD 8.0 release](https://www.openbsd.org/80.html) and [amd64 package collection](https://cdn.openbsd.org/pub/OpenBSD/8.0/packages/amd64/) provide the build inputs. The 8.0 package collection provides GNOME Shell 49 and Plasma 6.7. The exact installed versions belong to each disk’s package inventory. OpenBSD supplies cwm, xenodm, xterm, xlock, and tmux with the system. Firefox, Geany, the Qt file manager, and the remaining cwm applications come from packages.
+D-Bus carries messages between programs. The system bus serves machine-wide services. The session bus gives programs running as the logged-in user a place to discover and talk to one another. In the Plasma startup script, ConsoleKit associates the login with a local session, then `dbus-run-session` supplies the bus for the workspace and its applications. [Desktop startup scripts](guest/edition-desktop.sh) · [GDM configuration](guest/gdm.sh)
 
-### Network, maintenance, and integration
+### A small X11 desktop you can take apart
 
-`/etc/hostname.em0` contains `inet autoconf`. Each VM gets an address behind NAT. Root SSH login is disabled. SSH is enabled inside the guest, and the recommended VirtualBox configuration has no incoming port forwards. The provisioning step discards SSH host keys and DHCP state so copies get fresh identities on first boot. Use `su -` from the wheel account for administration.
+Follow **Super+P** in the cwm edition. In `~/.cwmrc` the binding is named `4-p`, where `4` means the Mod4 key mapped to Super. It runs `mvm-launch`, which calls `dmenu_run` with a font and four colors. dmenu suggests executable names from the search path and launches the selection. The panel plays no part in this shortcut. Changing a launcher color and changing the focused window’s gold border therefore take you to two different files. [Window manager bindings](guest/cwm/home/.cwmrc) · [Launcher](guest/cwm/bin/mvm-launch)
 
-Run `syspatch` and `pkg_add -u` as root to maintain the installed release. Follow reboot instructions from `syspatch`. The build waits for kernel relinking and checks `/bsd` against the recorded checksum before it powers off. OpenBSD has no Oracle Guest Additions. USB Tablet provides absolute pointer input. For file transfer, use a separately configured network service. The guest’s display settings control the available resolutions.
+At login, the session script loads `~/.Xresources` for xterm, asks GTK applications to prefer dark colors, and paints the wallpaper with feh. The gold seam in that wallpaper is drawn by a few lines of `awk` that write a portable pixmap. tint2 supplies the panel, Conky draws system statistics, dunst displays notifications, and Parcellite remembers clipboard entries inside the guest. Picom combines X11 window surfaces using XRender, with shadows and fading disabled. The final `exec cwm` makes cwm the foreground session process. Quitting it returns you to the greeter. [Session script](guest/cwm/bin/mvm-cwm-session) · [Wallpaper generator](guest/cwm/install.sh)
 
-### The cwm environment
+The visual settings follow the component that reads them. xterm reads its green palette and JetBrains Mono font from X resources. PCManFM-Qt reads the Qt style through `qt6ct`. GTK applications have their own settings, which LXAppearance can help edit. The panel, Conky, and Picom each read a file under `~/.config`. A running guest can show you which font matched with `fc-match "JetBrains Mono"`. The same release report also checks for the Poppler plugin that gives Zathura its PDF support. [Configuration files](guest/cwm/home/.config) · [Keyboard guide](guest/cwm/KEYS.txt)
 
-| Function | Programs and configuration |
-| --- | --- |
-| Shell and navigation | cwm, dmenu, tint2, xterm, tmux, PCManFM-Qt, Midnight Commander |
-| Background and X11 services | feh, picom with `backend = "xrender"`, X11 Conky, dunst, xlock, scrot, Parcellite |
-| Reading, editing, and media | Vim, Geany, Firefox, Zathura with the Poppler PDF plugin, mpv, Fastfetch |
-| Appearance | JetBrains Mono, LXAppearance, dark Adwaita GTK and Qt styles, charcoal surfaces, muted-gold focus, green terminal text |
+The Print Screen binding points to another small script. It creates the screenshots directory if necessary and invokes `scrot` with a timestamped PNG name. The rest of the workbench uses ordinary applications you can also run by name. There is Vim in a terminal and Geany in a graphical window, Firefox for the web, mpv for media, and Fastfetch for a one-time system summary beside Conky’s live view. [Screenshot script](guest/cwm/bin/mvm-screenshot)
 
-The session script loads X resources, starts the daemons, paints the wallpaper, and hands control to cwm. Adjust shortcuts in `~/.cwmrc`, the panel in `~/.config/tint2/tint2rc`, Conky in `~/.config/conky/conky.conf`, and the compositor in `~/.config/picom/picom.conf`. Parcellite manages the guest’s X11 clipboard. The keyboard guide is installed under `/usr/local/share/mvm/`.
+### Hardware, networking, and the identity of a copy
 
-### Build, verification, and checksums
+A VDI carries the installed operating system. VirtualBox supplies the virtual motherboard and attached devices. Legacy BIOS starts the bootloader, the AHCI controller exposes the disk as `sd0`, and OpenBSD recognizes the emulated Intel Ethernet adapter as `em0`. A USB tablet reports absolute positions, so the host can point at a particular spot in the guest. This works with OpenBSD’s own input support. OpenBSD has no Oracle Guest Additions, so file transfers use a network service and the guest controls the available display resolutions. [VirtualBox 7.2 User Guide](https://docs.oracle.com/en/virtualization/virtualbox/7.2/user/)
 
-The package stage boots the official system with QEMU, installs packages, and saves a powered-off QCOW2 checkpoint per edition. The release stage configures that edition, exports a standalone, dynamically allocated VDI, and compares its guest-visible sectors with the source. VirtualBox boots a disposable byte-for-byte copy of the exported VDI. The build checks the original file’s SHA-256 again after the graphical tests and after extraction from the archive. The following files accompany the numbered archives.
+OpenBSD reads `inet autoconf` from `/etc/hostname.em0`. VirtualBox’s NAT supplies a lease and handles outgoing traffic. In the published Plasma test, `ifconfig em0` showed `10.0.2.15` and `route -n get default` showed `10.0.2.2` as the gateway. That address belongs to the guest’s virtual network. Incoming SSH requires a deliberate forwarding rule or a different network configuration. The build removes its saved lease and SSH host keys. Each copy requests a lease and generates its own server keys. Two guests on separate VirtualBox NAT networks can legitimately receive the same private IP address. The `desktop` account belongs to `wheel` for local administration through `su -`. Direct root SSH login is disabled.
 
-| Release file | What to inspect |
-| --- | --- |
-| `IMAGE-INFO.txt` | Source commit, package preparation run, verification run, virtual capacity, extracted file size, and the VDI’s SHA-256. |
-| `PACKAGES.txt` | Installed packages, including their exact versions and port revisions. |
-| `verification.txt` | Guest identity, graphical login, interactive xterm and its pseudo-terminal, DHCP address, default route, and two distinct boot times. The cwm report also records the file-manager and lock/unlock tests. |
-| `4096-MiB.txt` | The separate 4 GiB login test for GNOME or Plasma. The full interactive test uses the recommended memory. |
-| `before-login.png`, `desktop.png`, `terminal.png` | The greeter, the logged-in desktop, and the interactive terminal captured from the virtual monitor. |
+### Checking the copy you downloaded
 
-For a numbered archive, download its checksum file and all volumes to one directory. On Linux use `sha256sum -c SHA256SUMS-downloads.txt`. On FreeBSD and OpenBSD use `sha256 filename`, on macOS use `shasum -a 256 filename`, and in Windows PowerShell use `Get-FileHash .\filename -Algorithm SHA256`. Compare the 64 hexadecimal digits. The extracted `SHA256SUMS` contains the hash of the VDI. Check it **before the first boot**, which writes to the disk.
+For GNOME, Plasma, and cwm, `SHA256SUMS-downloads.txt` identifies each compressed volume. With all volumes and that file in one directory, Linux can check them with `sha256sum -c SHA256SUMS-downloads.txt`. FreeBSD or OpenBSD can print a file’s digest with `sha256 filename`, macOS with `shasum -a 256 filename`, and Windows PowerShell with `Get-FileHash filename -Algorithm SHA256`. Compare all 64 hexadecimal digits with the matching entry. The original Xfce ZIP has a [separate ZIP checksum](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-xfce-public-45953251746-1/OpenBSD-8.0-Xfce-amd64.zip.sha256).
 
-The original Xfce ZIP has its own [ZIP checksum](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-xfce-public-45953251746-1/OpenBSD-8.0-Xfce-amd64.zip.sha256) and an internal VDI checksum. Its archived installation guide remains specific to that image. The manual **Build OpenBSD Xfce** and **Update existing OpenBSD disk** workflows preserve its original build and refresh paths.
+Every archive contains `SHA256SUMS` for the extracted VDI. Check it **before the first boot**, while your copy still has the published bytes. The newer releases also include `PACKAGES.txt` for exact package versions, `verification.txt` for the full test, and, for GNOME and Plasma, `4096-MiB.txt` for the shorter login trial. The three screenshots show the greeter, desktop, and terminal as seen by the virtual monitor. `IMAGE-INFO.txt` connects those observations to a source commit, build runs, disk size, and hash. The original Xfce inventory is included with its ZIP. These download hashes establish that your files match this project’s release. The OpenBSD signature at the start of the build authenticates the upstream installer.
 
-To rebuild, use **Actions → Prepare desktop packages**, choose an edition, then use the edition release workflow with that preparation run’s ID. The temporary package checkpoint expires after two days. Leaving the run ID blank selects the newest available checkpoint for that edition on `main`. Package updates can change a later build. The published VM downloads live under **Releases**. Editing the README does not start a build.
-
-Further reading: [OpenBSD documentation](https://www.openbsd.org/faq/), [VirtualBox 7.2 User Guide](https://docs.oracle.com/en/virtualization/virtualbox/7.2/user/).
+For maintainers following the numbered releases, **Prepare desktop packages** produces an edition-specific checkpoint retained for two days. The release workflow accepts that run ID or selects the newest available matching checkpoint on `main`. It verifies the original VDI’s hash after testing, tests the archive, hashes the VDI streamed back out of it, and compares each uploaded asset’s size and SHA-256 with the local file before publishing. A later build can receive newer packages. To identify exactly what ran in a particular release, start with that release’s inventory and report. [Preparation workflow](.github/workflows/prepare.yml) · [Release workflow](.github/workflows/release.yml) · [Packaging script](editions/package.sh)
 
 ## License
 
