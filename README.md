@@ -49,7 +49,11 @@ In a terminal, run `passwd` to change the desktop password. Then run `su -`, ent
 
 Open the applications menu on the panel. Thunar manages files. **Alt+F2** opens the launcher, where you can type `xterm`. Use the logout menu to shut down.
 
-The original Xfce disk was tested in VirtualBox 7.2.22 on a FreeBSD 15 host. Its ZIP is about **1.49 GB**. The extracted VDI initially occupies about **4.4 GB** and can grow to **16 GiB**. [Original release and offline instructions.](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-xfce-public-45953251746-1)
+The original Xfce disk was tested in VirtualBox 7.2.22 on FreeBSD 15 and Ubuntu 24.04 hosts. The Ubuntu check signed in through xenodm, opened an interactive xterm, fetched data over HTTPS, and rebooted back to the greeter. Its ZIP is about **1.49 GB**. The extracted VDI initially occupies about **4.4 GB** and can grow to **16 GiB**. [Original release and offline instructions.](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-xfce-public-45953251746-1)
+
+![The original OpenBSD Xfce desktop running in VirtualBox 7.2.22](images/xfce.png)
+
+[VirtualBox verification run](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/actions/runs/46039718550)
 
 ### GNOME
 
