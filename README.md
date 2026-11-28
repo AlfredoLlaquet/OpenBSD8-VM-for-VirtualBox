@@ -22,17 +22,29 @@ All four disks were tested in **VirtualBox 7.2.22**. The download size includes 
 You need VirtualBox on a 64-bit Intel or AMD computer. These are x86-64 guests. VirtualBox on an Apple silicon Mac or an ARM-based Windows computer requires a different guest architecture. **Host** means your normal computer. **Guest** means the OpenBSD desktop inside the VM window.
 
 1. **Download one edition.** On its release page, expand **Assets**. For a ZIP, extract it normally. For a numbered 7-Zip archive, download every file ending in `.7z.001`, `.002`, and so on into one folder. Open the first part with 7-Zip or an archive manager that supports split 7z files, and extract once. GitHub’s **Source code** links contain the build scripts. The extracted **`.vdi`** is the installed disk. Keep it in a permanent folder.
-2. **Create the machine.** In VirtualBox Manager, click **New**, give the VM a name such as **OpenBSD Plasma**, and select **BSD → OpenBSD (64-bit)**. Leave **ISO Image** empty. Set **2 processors** and the memory shown above. In VirtualBox, 3 GiB is **3072 MB** and 6 GiB is **6144 MB**. Leave **EFI/UEFI** unchecked. Choose **Use an existing virtual hard disk file** if offered. Otherwise, finish the wizard and attach the disk in the next step.
-3. **Attach the disk.** With the machine powered off, open **Settings → Storage**. Switch to **Expert** view if necessary. Find **Controller: AHCI** or add an **AHCI (SATA)** controller. If the wizard placed the extracted VDI under **Controller: IDE**, drag its entry onto **Controller: AHCI**. To attach it manually, select the AHCI controller, click **Add Hard Disk**, then **Add** to locate the VDI and **Choose**. Remove the attachment of any blank disk the wizard created. The downloaded VDI should be the only hard disk, on **AHCI port 0**. The empty IDE optical drive can stay where it is.
-4. **Set the remaining hardware.** Use the settings in the table below. Click **OK**, select the VM, and click **Start**.
-5. **Sign in as `desktop`.** Enter the password from the next section and press **Enter**. Password fields can stay blank while you type. The initial keyboard layout is US English.
+2. **Create the machine.** In VirtualBox Manager, click **New**, give the VM a name such as **OpenBSD Plasma**, and select **BSD → OpenBSD (64-bit)**. Leave **ISO Image** empty. Set **2 processors** and the memory shown above. In VirtualBox, 3 GiB is **3072 MB** and 6 GiB is **6144 MB**. Leave **UEFI** unchecked.
 
-| VirtualBox setting | Value |
+   If the wizard offers **Use an existing virtual hard disk file**, select that option, then browse to the `.vdi` file you extracted in step 1 and choose it. This attaches the file as the new VM’s hard drive. It already contains OpenBSD and your chosen desktop. If the wizard skips this option, finish creating the VM and attach the disk in step 3.
+
+3. **Attach the disk.** With the machine powered off, open **Settings → Storage**. Switch to **Expert** view if necessary. Find **Controller: AHCI** or add an **AHCI (SATA)** controller. If the wizard placed the extracted VDI under **Controller: IDE**, drag its entry onto **Controller: AHCI**. To attach it manually, select the AHCI controller, click **Add Hard Disk**, then **Add** to locate the VDI and **Choose**. Remove the attachment of any blank disk the wizard created. The downloaded VDI should be the only hard disk, on **AHCI port 0**. The empty IDE optical drive can stay where it is.
+4. **Set the remaining hardware.** In the VM’s **Settings** window, apply the settings in the table below.
+
+| VirtualBox setting | What to select |
 | --- | --- |
-| System → Motherboard | Legacy BIOS, I/O APIC enabled |
-| System → Pointing Device | USB Tablet. Enable the USB controller if prompted. USB 1.1 (OHCI) is sufficient. |
-| Display → Screen | VBoxVGA, 64 MB for the original Xfce image and 128 MB for the other editions, 3D acceleration off |
-| Network → Adapter 1 | NAT, Intel PRO/1000 MT Desktop (82540EM), Cable Connected |
+| System → Motherboard | Under **Features**, check **I/O APIC** and leave **UEFI** unchecked to use legacy BIOS. |
+| System → Motherboard → Pointing Device | Choose **USB Tablet**. Enable the USB controller if prompted. USB 1.1 (OHCI) is sufficient. |
+| Display → Screen | Choose **VBoxVGA** and leave **3D Acceleration** unchecked. Set video memory to **64 MB** for the original Xfce edition or **128 MB** for the other three editions. |
+| Network → Adapter 1 | Choose **NAT** and the **Intel PRO/1000 MT Desktop (82540EM)** adapter. Check **Cable Connected**. |
+
+5. **Save the settings.** Click **OK**. Your VM is now ready to start.
+6. **Start the VM.** In VirtualBox Manager, select the OpenBSD VM you just created and click **Start**.
+7. **Sign in as `desktop`.** Enter the password listed under [Sign in and change the passwords](#sign-in-and-change-the-passwords) and press **Enter**. Password fields can stay blank while you type. The initial keyboard layout is US English.
+
+## Recommended desktop settings
+
+**GNOME only.** When the FreeBSD VM locks after sitting idle, it can accept the correct password and take you straight back to the lock screen. We recommend turning off automatic screen blanking after your first sign-in so the display stays on while the VM is idle.
+
+Open **Settings → Power**, select **Power Saving** if that tab is shown, and turn off **Automatic Screen Blank**.
 
 ## Sign in and change the passwords
 
@@ -61,12 +73,7 @@ Press **Super** (the Windows or Command key sent to the guest) for the Activitie
 
 GNOME Shell `49.10p2`. The extracted VDI initially occupies **7.1 GB** on the host and can grow to **48 GiB**. Use **6 GiB** for GNOME. At **4 GiB**, the greeter appeared, but the user’s GNOME Shell did not start within the five-minute check. [Release files and verification report.](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-gnome-46052866705-1)
 
-<details>
-<summary>View the GNOME desktop</summary>
-
 ![OpenBSD with GNOME running in VirtualBox](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-gnome-46052866705-1/desktop.png)
-
-</details>
 
 ### KDE Plasma
 
@@ -74,12 +81,7 @@ Use the application launcher on the panel or press **Alt+Space** to search. **Do
 
 Plasma Workspace `6.7.5`. The extracted VDI initially occupies **10.6 GB** on the host and can grow to **48 GiB**. At **4 GiB**, one test reached the desktop and another showed the wallpaper without its panel. Use **6 GiB** for Plasma. [Release files and verification report.](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-plasma-46052053042-1)
 
-<details>
-<summary>View the KDE Plasma desktop</summary>
-
 ![OpenBSD with KDE Plasma running in VirtualBox](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-plasma-46052053042-1/desktop.png)
-
-</details>
 
 ### cwm
 
@@ -99,12 +101,7 @@ Press **Super+P**, type a program name, and press **Enter**. The bottom panel sh
 
 The window manager is part of the OpenBSD 8.0 base system. The extracted VDI initially occupies **6.4 GB** on the host and can grow to **48 GiB**. [Release files and verification report.](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/tag/openbsd-8.0-cwm-46047375931-1)
 
-<details>
-<summary>View the cwm desktop</summary>
-
 ![OpenBSD with cwm running in VirtualBox](https://github.com/AlfredoLlaquet/OpenBSD8-VM-for-VirtualBox/releases/download/openbsd-8.0-cwm-46047375931-1/desktop.png)
-
-</details>
 
 ### Shut down or troubleshoot
 
@@ -112,7 +109,7 @@ Use the desktop’s power menu when available. From any edition, run `su -` in a
 
 | Symptom | What to check |
 | --- | --- |
-| No bootable medium, or an installer starts | Attach the extracted VDI to AHCI port 0, leave the optical drive empty, and turn EFI off. |
+| No bootable medium, or an installer starts | Attach the extracted VDI to AHCI port 0, keep the optical drive empty, and leave **UEFI** unchecked. |
 | The desktop does not appear | Check the graphics controller, video memory, 3D setting, and the edition’s RAM. |
 | The mouse is captured | Select USB Tablet. The Host key shown at the bottom of the VM window releases captured input. |
 | Login fails | Check capitalization and the US keyboard layout. The root password contains both an underscore and a period. |
